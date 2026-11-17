@@ -42,6 +42,9 @@
     serverLoc: $("serverLoc"),
     moreBtn: $("moreBtn"),
     resultBar: $("resultBar"),
+    speedCard: $("speedCard"),
+    cardProgress: $("cardProgress"),
+    cardProgressFill: $("cardProgressFill"),
     resultId: $("resultId"),
     copyResult: $("copyResult"),
     openResult: $("openResult"),
@@ -471,8 +474,16 @@
     }
   }
 
+  // 卡片底部进度条：0~100，测速各阶段推进
+  function setCardProgress(pct) {
+    if (!els.cardProgressFill) return;
+    els.cardProgressFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
   function resetDial() {
     els.dial.classList.remove("testing", "gauge", "up");
+    if (els.speedCard) els.speedCard.classList.remove("testing", "result");
+    setCardProgress(0);
     els.arc.style.strokeDashoffset = CIRC;
     els.metricTop.hidden = true;
     els.pingRow.hidden = true;
@@ -485,6 +496,8 @@
 
   function enterGaugeMode() {
     els.dial.classList.add("gauge");
+    if (els.speedCard) els.speedCard.classList.add("testing");
+    setCardProgress(4);
     els.dial.classList.remove("up");
     if (els.mtUpItem) els.mtUpItem.classList.remove("live");
     buildTicks(gaugeMax);
@@ -510,7 +523,7 @@
   function initTheme() {
     var saved = null;
     try { saved = localStorage.getItem("st_theme"); } catch (e) {}
-    if (!saved) saved = "dark";
+    if (!saved) saved = "light";
     applyTheme(saved);
   }
 
@@ -1429,6 +1442,7 @@
     try {
       var ping = await measurePing(state.base, 5);
       if (state.abort.signal.aborted) throw new Error("aborted");
+      setCardProgress(12);
 
       var dlMeter = makeMeter(gaugeMax);
       setGauge(0, dlMeter.max());
@@ -1443,6 +1457,7 @@
       setGauge(dl, gaugeMax);
       setDial(fmtSpeed(dl), speedUnit(), "", true);
       els.mtDown.textContent = fmtSpeed(dl);
+      setCardProgress(55);
 
       setGauge(0, gaugeMax);
       setDial("0.00", speedUnit(), "", true);
@@ -1458,12 +1473,14 @@
       ul = finalSpeed(ulRun.samples) || ul;
       setDial(fmtSpeed(ul), speedUnit(), "", true);
       els.mtUp.textContent = fmtSpeed(ul);
+      setCardProgress(92);
 
       setRunning(false);
       els.dial.classList.remove("up");
       buildTicks(gaugeMax);
       setGauge(dl, gaugeMax);
       setDial(fmtSpeed(dl), speedUnit(), "", true);
+      setCardProgress(100);
       showResult(ping, dl, ul);
       reportResult(ping, dl, ul, dlBytes, ulBytes, buildTimeline(ping, dlRun.samples, ulRun.samples));
     } catch (e) {
@@ -1474,6 +1491,7 @@
   }
 
   function showResult(ping, down, up) {
+    if (els.speedCard) { els.speedCard.classList.remove("testing"); els.speedCard.classList.add("result"); }
     els.pgPing.textContent = fmtPing(ping.ping);
     els.pgJitter.textContent = fmtPing(ping.jitter);
     els.pgLoss.textContent = (ping.loss || 0) + "%";

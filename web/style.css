@@ -31,10 +31,15 @@
   --exp-ico: #9aa0a6;
   --exp-dot: rgba(255, 255, 255, 0.5);
   --exp-dot-on: #d5dae2;
+  /* 卡片（深色默认值，浅色主题在下方覆盖） */
+  --card-bg: #101214;
+  --card-border: rgba(255, 255, 255, 0.07);
+  --card-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="light"] {
-  --bg: #ffffff;
+  /* 原版 speedtest.net 浅色：浅灰页面底 + 纯白卡片 */
+  --bg: #f4f5f7;
   --fg: #0a0c0e;
   --muted: #6b7280;
   --muted-2: #9aa1a8;
@@ -44,7 +49,7 @@
   --hover: rgba(0, 0, 0, 0.05);
   --panel: #ffffff;
   --panel-line: rgba(0, 0, 0, 0.12);
-  --header-bg: rgba(242, 242, 242, 0.72);
+  --header-bg: rgba(255, 255, 255, 0.82);
   --link: #1a7fbf;
   --gauge-track: #e4e8ee;
   --dot-off: rgba(0, 0, 0, 0.2);
@@ -56,6 +61,10 @@
   --exp-ico: #656565;
   --exp-dot: #9193a8;
   --exp-dot-on: #5f6470;
+  /* 卡片 */
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.04);
 }
 
 [hidden] { display: none !important; }
@@ -246,6 +255,14 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .pill-btn:hover { background: var(--fg); color: var(--bg); }
 
+/* 顶部 Download 按钮：青色描边（与原版一致） */
+.pill-download {
+  gap: 6px;
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.pill-download:hover { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+
 .rainbow {
   height: 2px;
   width: 100%;
@@ -321,11 +338,61 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   align-items: center;
 }
 
+/* 测速卡片：原版初始态 GO 无卡片，测速中/结果态才显示白色圆角卡片 */
+.speed-card {
+  width: min(560px, 100%);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: none;
+  padding: 30px 34px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: background .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.speed-card.testing,
+.speed-card.result {
+  background: var(--card-bg);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+@media (max-width: 620px) {
+  .speed-card { padding: 24px 18px 20px; border-radius: 8px; }
+}
+
+/* 卡片底部进度条：测速阶段推进，青→蓝渐变（与原版一致） */
+.card-progress {
+  align-self: stretch;
+  height: 3px;
+  margin: 26px -34px -26px;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.speed-card.testing .card-progress { opacity: 1; }
+.card-progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #2de5d1, #1fa4e9);
+  transition: width .5s ease;
+}
+@media (max-width: 620px) {
+  .card-progress { margin: 22px -18px -20px; }
+}
+
 .toolbar {
   display: flex;
   gap: 22px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
+
+/* 卡片内的连接信息行：收紧上间距 */
+.speed-card .conn-row { margin-top: 26px; }
 
 .tiny-btn {
   appearance: none;
