@@ -74,7 +74,7 @@
 
   /* ---------------- 仪表盘（测速态） ---------------- */
 
-  var G = { cx: 200, cy: 200, r: 150, start: 135, sweep: 270, tickR: 112 };
+  var G = { cx: 200, cy: 200, r: 150, start: 135, sweep: 270, tickR: 108 };
   var G_LEN = 2 * Math.PI * G.r * (G.sweep / 360);
   els.gaugeArc.style.strokeDasharray = G_LEN + " " + G_LEN;
   els.gaugeArc.style.strokeDashoffset = G_LEN;
@@ -129,7 +129,8 @@
     single: ["#ffd684", "#ff886a"]
   };
   var GAUGE_COLORS = {
-    multi: ["#1f5cff", "#2b9fe0", "#7cf6ff"],
+    // 原版 speedtest.net：左下深蓝 → 中段蓝 → 顶部/右上亮青（不过分发白）
+    multi: ["#2450e8", "#2f9fe0", "#4fd6e8"],
     single: ["#ffd684", "#ffab7a", "#ff886a"]
   };
 

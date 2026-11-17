@@ -40,8 +40,8 @@ git branch -M main
 git remote add origin https://github.com/你的用户名/你的仓库名.git
 git push -u origin main
 
-# 2. 打标签触发自动构建（ ghcr.io/你的用户名/你的仓库名:v1.2.37 与 :latest ）
-git tag v1.2.37 && git push origin v1.2.37
+# 2. 打标签触发自动构建（ ghcr.io/你的用户名/你的仓库名:v1.2.38 与 :latest ）
+git tag v1.2.38 && git push origin v1.2.38
 ```
 
 - 在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则推 ghcr.io 会没权限。
@@ -53,9 +53,9 @@ git tag v1.2.37 && git push origin v1.2.37
 ```bash
 # 主控版
 mkdir -p /app/speed && cd /app/speed
-IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.37 docker compose up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.38 docker compose up -d
 # 节点版
-IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.37 docker compose -f docker-compose.node.yml up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.38 docker compose -f docker-compose.node.yml up -d
 ```
 
 本地无镜像时 `docker compose up -d` 会自动从 ghcr.io 拉取；`--build` 则用源码现构建。
