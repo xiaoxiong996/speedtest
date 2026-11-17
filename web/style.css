@@ -1,0 +1,1170 @@
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/montserrat.woff2") format("woff2-variations"),
+       url("/fonts/montserrat.woff2") format("woff2");
+}
+
+:root {
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: #8b8f94;
+  --muted-2: #5c6167;
+  --cyan: #3ec8d6;
+  --cyan-glow: rgba(62, 200, 214, 0.55);
+  --line: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.07);
+  --panel: #0a0a0a;
+  --panel-line: rgba(255, 255, 255, 0.12);
+  --header-bg: rgba(0, 0, 0, 0.72);
+  --link: #339fe0;
+  --gauge-track: #1b2233;
+  --dot-off: rgba(255, 255, 255, 0.24);
+  --mode-multi: #43b7ff;
+  --mode-single: #ff9166;
+  /* 与原版一致的图标配色：下载青绿、上传紫、延迟金、体验图标灰、评级圆点蓝灰 */
+  --ico-dl: #00c9c0;
+  --ico-ul: #b75cf0;
+  --ico-ping: #d4ac12;
+  --exp-ico: #9aa0a6;
+  --exp-dot: rgba(255, 255, 255, 0.5);
+  --exp-dot-on: #d5dae2;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #0a0c0e;
+  --muted: #6b7280;
+  --muted-2: #9aa1a8;
+  --cyan: #0e9dad;
+  --cyan-glow: rgba(14, 157, 173, 0.4);
+  --line: rgba(0, 0, 0, 0.16);
+  --hover: rgba(0, 0, 0, 0.05);
+  --panel: #ffffff;
+  --panel-line: rgba(0, 0, 0, 0.12);
+  --header-bg: rgba(242, 242, 242, 0.72);
+  --link: #1a7fbf;
+  --gauge-track: #e4e8ee;
+  --dot-off: rgba(0, 0, 0, 0.2);
+  --mode-multi: #0076c9;
+  --mode-single: #e56b4f;
+  --ico-dl: #00b3aa;
+  --ico-ul: #a84be0;
+  --ico-ping: #b89800;
+  --exp-ico: #656565;
+  --exp-dot: #9193a8;
+  --exp-dot-on: #5f6470;
+}
+
+[hidden] { display: none !important; }
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+/* ---------------- 顶栏 ---------------- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--header-bg);
+  backdrop-filter: blur(10px);
+}
+
+.header-inner {
+  max-width: 1260px;
+  margin: 0 auto;
+  height: 66px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  text-decoration: none;
+  margin-right: 12px;
+}
+
+.logo-mark { width: 20px; height: 20px; display: block; }
+img.logo-mark { object-fit: contain; border-radius: 4px; }
+
+.logo-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.hbtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.hbtn:hover { color: var(--fg); background: var(--hover); }
+
+.lang-wrap { position: relative; }
+
+.lang-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px 6px 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lang-btn:hover { color: var(--fg); background: var(--hover); }
+
+.lang-caret {
+  width: 15px;
+  height: 15px;
+  opacity: 0.75;
+  transition: transform 0.18s ease;
+}
+
+.lang-btn[aria-expanded="true"] .lang-caret { transform: rotate(180deg); }
+
+.lang-panel {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  min-width: 156px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  z-index: 40;
+}
+
+.lang-panel[hidden] { display: none; }
+
+.lang-title {
+  font-size: 11px;
+  color: var(--muted-2);
+  letter-spacing: 0.04em;
+  padding: 2px 10px 6px;
+}
+
+.lang-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.lang-panel button:hover { background: var(--hover); }
+.lang-panel button.on { color: var(--mode-multi); font-weight: 500; }
+
+.theme-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  width: 48px;
+  height: 25px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  margin-left: 4px;
+  padding: 0;
+}
+
+.theme-btn:hover { color: var(--fg); border-color: var(--fg); }
+
+[data-theme="dark"] .i-sun { opacity: 0.45; }
+[data-theme="light"] .i-moon { opacity: 0.45; }
+[data-theme="dark"] .i-moon,
+[data-theme="light"] .i-sun { opacity: 1; color: var(--fg); }
+
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 19px;
+  border: 1px solid var(--fg);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pill-btn:hover { background: var(--fg); color: var(--bg); }
+
+.rainbow {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, #10d9ff 0%, #0f7bff 26%, #5a3bff 58%, #a13bff 80%, #d13bff 100%);
+}
+
+/* 下拉菜单 */
+
+.menu-wrap { position: relative; }
+
+.menu-panel {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  min-width: 138px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  z-index: 40;
+}
+
+.menu-panel[hidden] { display: none; }
+
+.menu-panel button,
+.menu-panel a {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.menu-panel button:hover,
+.menu-panel a:hover { background: var(--hover); }
+
+/* ---------------- 主区 ---------------- */
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: 26px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 工具栏固定在顶栏下方，其余内容在剩余空间里垂直居中；
+   内容超高时（仪表盘测速态）自动向上收拢，不会把顶部裁掉。 */
+.stage {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-inner {
+  margin: auto 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.toolbar {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 22px;
+}
+
+.tiny-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 4px 2px;
+  transition: color 0.15s ease;
+}
+
+.tiny-btn:hover { color: var(--fg); }
+
+/* 圆环 */
+
+.dial {
+  position: relative;
+  width: clamp(158px, 12vw, 176px);
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  outline: none;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dial.gauge { width: clamp(272px, 24vw, 334px); }
+
+/* 表盘放大后，中心数值跟着放大 */
+.dial.gauge .dial-value { font-size: 46px; }
+.dial.gauge .dial-value.num { font-size: 41px; }
+/* Kbps 下数字会到六七位，收一点字号；再长的由 trimTicks 把重叠的刻度隐掉 */
+.dial.gauge .dial-value.xlong { font-size: 30px; }
+.dial.gauge .dial-value.xxlong { font-size: 26px; }
+.dial.gauge .dial-phase { font-size: 10.5px; }
+.dial.gauge .dial-unit { font-size: 11px; }
+
+.dial-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.dial-track {
+  fill: none;
+  stroke: url(#ringGrad);
+  stroke-width: 2;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.dial-arc {
+  fill: none;
+  stroke: url(#ringGrad);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--ring-glow, rgba(45, 180, 220, 0.5)));
+  transition: stroke-dashoffset 0.2s linear;
+}
+
+/* 单一连接：橙色环（与 speedtest.net 一致） */
+.dial { --ring-glow: rgba(56, 190, 225, 0.48); }
+.dial[data-mode="single"] { --ring-glow: rgba(255, 150, 106, 0.5); }
+
+.dial.testing .dial-track { opacity: 0.14; }
+.dial:hover .dial-track { opacity: 1; }
+
+.dial-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  gap: 1px;
+}
+
+.dial-phase {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  height: 13px;
+  transition: opacity 0.2s ease;
+}
+
+.dial-value {
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  transition: font-size 0.2s ease, letter-spacing 0.2s ease;
+}
+
+.dial-value.num {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.dial-unit {
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  height: 14px;
+}
+
+/* 指针仪表盘 */
+
+.gauge-svg { display: none; width: 100%; height: 100%; overflow: visible; }
+.dial.gauge .dial-svg { display: none; }
+.dial.gauge .gauge-svg { display: block; }
+
+.gauge-track {
+  fill: none;
+  stroke: var(--gauge-track);
+  stroke-width: 26;
+  stroke-linecap: round;
+}
+
+.gauge-arc {
+  fill: none;
+  stroke: url(#gaugeGrad);
+  stroke-width: 26;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 11px rgba(60, 190, 255, 0.5));
+  transition: stroke-dashoffset 0.26s linear;
+}
+
+.gauge-ticks text {
+  fill: var(--muted);
+  font-family: inherit;
+  font-size: 13.5px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.gauge-needle {
+  transform-box: view-box;
+  transform-origin: 200px 200px;
+  transition: transform 0.34s cubic-bezier(0.33, 0.8, 0.3, 1);
+}
+
+.gauge-needle polygon { filter: drop-shadow(0 0 7px rgba(220, 236, 255, 0.3)); }
+
+.dial.gauge .dial-center { padding-top: 13%; }
+.dial.gauge .dial-value { font-size: clamp(26px, 2.5vw, 30px); }
+.dial.gauge .dial-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* 表盘下方的下载 / 上传小图标（原版：⊙ Mbps） */
+.du-ico { display: none; width: 13px; height: 13px; flex: none; }
+.dial.gauge .du-ico.du-dl { display: block; color: var(--ico-dl); }
+.dial.gauge.up .du-ico.du-dl { display: none; }
+.dial.gauge.up .du-ico.du-ul { display: block; color: var(--ico-ul); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 顶部下载 / 上传 */
+
+.metric-top {
+  display: flex;
+  justify-content: center;
+  gap: clamp(46px, 7.5vw, 88px);
+  margin-bottom: 10px;
+}
+
+.mt-item { text-align: center; min-width: 104px; }
+
+.mt-num {
+  font-size: clamp(26px, 2.9vw, 34px);
+  font-weight: 500;
+  line-height: 1.18;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.mt-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.mt-label .mt-unit { font-size: 11px; color: var(--muted); margin-left: 3px; }
+
+/* 图标配色与原版一致：下载青绿、上传紫；上传未开始时先灰着 */
+.mico { flex: none; }
+.mico.dl { color: var(--ico-dl); }
+.mico.ul { color: var(--muted); transition: color .2s ease; }
+#mtUpItem.live .mico.ul { color: var(--ico-ul); }
+
+/* 体验指标：四个图标 + 5 点评级（测速中 / 结果页） */
+
+.exp-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(26px, 4.2vw, 48px);
+  margin: 2px 0 16px;
+}
+
+.exp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--exp-ico);
+}
+
+.exp svg { width: 34px; height: 34px; display: block; }
+
+.exp-dots { display: flex; gap: 4px; }
+
+.exp-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--exp-dot);
+}
+
+.exp-dots i.on { background: var(--exp-dot-on); }
+
+/* Ping 行：金色换向箭头 / 青绿下箭头 / 紫色上箭头，与原版一致 */
+
+.ping-row {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.ping-cap { color: var(--fg); font-weight: 500; }
+.ping-cap span { font-size: 11.5px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+
+.ping-val { display: inline-flex; align-items: center; gap: 7px; }
+.ping-val b { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.pico { flex: none; }
+.pico.gold { color: var(--ico-ping); }
+.pico.teal { color: var(--ico-dl); }
+.pico.violet { color: var(--ico-ul); }
+
+/* 结果编号 */
+
+.result-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.rb-label { color: var(--muted-2); }
+.rb-id { color: var(--fg); font-weight: 500; letter-spacing: 0.02em; }
+
+.rb-btn {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color .15s ease, color .15s ease;
+}
+
+.rb-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* 连接信息：左=访客网络，中=两枚圆形按钮，右=测速节点（对齐 speedtest.net）
+   用三列网格保证中间两枚按钮永远落在 GO 圆环的正下方，
+   两侧文案再长也不会把图标挤偏。 */
+
+.conn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 0;
+  margin-top: 30px;
+  width: min(760px, 100%);
+  max-width: 100%;
+  /* 网格容器作为 flex 子项时默认不会小于内容宽度，这里放开避免窄屏溢出 */
+  min-width: 0;
+}
+
+/* 两块文案分别贴着中间的图标，整体仍然左右对称 */
+.conn-client { justify-self: end; }
+.conn-server { justify-self: start; }
+
+.conn-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+/* 运营商与 IP 都向右贴住人像圆钮，而不是从左边起排（.conn-side 默认左对齐，这里要压过它） */
+.conn-side.conn-client { text-align: right; }
+.conn-side.conn-client .cb-title { justify-content: flex-end; }
+
+/* IP 的结尾对齐到服务商文字的右边缘（徽标那一截让出来）：--ip-inset 由 app.js 实测写入 */
+.conn-side.conn-client .cb-sub { padding-right: var(--ip-inset, 0px); }
+
+.conn-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: none;
+}
+
+.ico {
+  appearance: none;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ico svg { width: 17px; height: 17px; display: block; }
+.ico:hover { color: var(--fg); border-color: var(--muted); }
+.ico:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+
+.cb-title {
+  font-size: 15px;
+  color: var(--fg);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asn-tag {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1.45;
+  flex: none;
+}
+
+.cb-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 2px;
+  /* IPv6 地址按「前 4 段 / 后 4 段」两行展示，换行符要保留 */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.conn-server .cb-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 15em;
+}
+
+.conn-change {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-top: 3px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--link);
+  text-align: left;
+  cursor: pointer;
+}
+
+.conn-change:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 连接模式：多重 ⇄ 单一，中间是切换按钮 */
+
+.mode-block { margin-top: 16px; text-align: center; }
+
+/* 协议（IPv4 / IPv6）：出现在信息块下方、连接方式上方 */
+.proto-block { margin-top: 34px; }
+.proto-block[hidden] + .mode-block { margin-top: 40px; }
+
+.proto-row { gap: 10px; }
+
+.proto-opt {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 2px 13px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.proto-opt:hover { color: var(--fg); border-color: var(--muted); }
+.proto-opt:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+.proto-opt.active {
+  color: var(--cyan);
+  border-color: currentColor;
+  background: rgba(62, 200, 214, 0.1);
+}
+
+.mode-label {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0;
+  margin-bottom: 10px;
+}
+
+.mode-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+
+.mode-opt {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 0.15s ease;
+}
+
+.mode-opt:hover { color: var(--fg); }
+.mode-opt.active { color: var(--fg); }
+.mode-opt[data-mode="multi"].active { color: var(--mode-multi); }
+.mode-opt[data-mode="single"].active { color: var(--mode-single); }
+
+.conn-toggle {
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.conn-toggle svg { width: 24px; height: 24px; display: block; }
+.conn-toggle:hover { color: var(--fg); border-color: var(--muted); }
+.conn-toggle:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+
+/* ---------------- 设置面板（点顶部「设置」展开） ---------------- */
+
+.settings-panel {
+  width: min(1020px, 100%);
+  margin-top: 40px;
+  text-align: left;
+}
+
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 46px;
+}
+
+.sp-col { min-width: 0; }
+
+.sp-head {
+  margin: 0 0 4px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+
+.sp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0 2px;
+}
+
+.sp-key {
+  flex: none;
+  width: 4.6em;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sp-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 11px;
+}
+
+.sp-opt {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.sp-opt:hover { color: var(--fg); }
+.sp-opt:focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; border-radius: 2px; }
+.sp-opt.active { color: var(--mode-multi); }
+
+.sp-select {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 22px 4px 8px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 52%, calc(100% - 9px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.sp-select:hover { border-color: var(--muted); }
+.sp-select option { background: var(--panel); color: var(--fg); }
+
+/* 示例行：实时展示时间/日期、速度、距离单位的效果，改完不用等测速就能看出变化 */
+.sp-preview {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.sp-line {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--muted);
+  padding-top: 8px;
+}
+
+.sp-line.sp-name { color: var(--fg); font-weight: 600; font-size: 13px; }
+.sp-ip { white-space: pre-line; overflow-wrap: anywhere; word-break: break-word; }
+
+.sp-btn {
+  appearance: none;
+  margin-top: 14px;
+  padding: 7px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.sp-btn:hover { border-color: var(--muted); background: var(--hover); }
+
+/* 设置展开时，下方这些区块让位给面板（与 speedtest.net 一致） */
+body.settings-open .conn-row,
+body.settings-open .proto-block,
+body.settings-open .mode-block,
+body.settings-open .result-bar { display: none; }
+
+.tiny-btn.on { color: var(--fg); }
+
+@media (max-width: 900px) {
+  .sp-grid { grid-template-columns: 1fr; gap: 28px; }
+  .settings-panel { margin-top: 28px; }
+}
+
+/* ---------------- 页脚 ---------------- */
+
+.site-foot {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted-2);
+  padding: 0 20px 26px;
+  line-height: 1.7;
+}
+
+/* ---------------- 弹窗 ---------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.modal[hidden] { display: none; }
+
+.modal-panel {
+  width: min(420px, 100%);
+  max-height: min(76vh, 620px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 16px;
+  border-bottom: 1px solid var(--panel-line);
+}
+
+.modal-title { font-size: 13px; letter-spacing: 0.02em; }
+
+/* ---------------- 本机测速历史 ---------------- */
+
+.hist-panel { width: min(520px, 100%); }
+.hist-list { overflow-y: auto; padding: 4px 10px; }
+.hist-empty {
+  padding: 36px 12px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted-2);
+}
+.hist-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+  padding: 11px 10px;
+  border-radius: 7px;
+  border-bottom: 1px solid var(--panel-line);
+  color: var(--fg);
+  text-decoration: none;
+}
+.hist-item:last-child { border-bottom: 0; }
+.hist-item:hover { background: var(--hover); }
+.hist-when { font-size: 12px; color: var(--muted); }
+.hist-proto { justify-self: end; font-size: 10px; letter-spacing: 0.08em; color: var(--muted-2); }
+.hist-vals {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: baseline;
+  font-size: 14px;
+}
+.hist-vals b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist-vals .dl { color: var(--ico-dl); }
+.hist-vals .ul { color: var(--ico-ul); }
+.hist-vals .pg { color: var(--ico-ping); }
+.hist-vals small { font-size: 10.5px; font-weight: 400; color: var(--muted-2); }
+.hist-id { grid-column: 1 / -1; font-size: 10.5px; color: var(--muted-2); }
+.hist-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid var(--panel-line);
+}
+.hist-count { font-size: 11px; color: var(--muted-2); }
+
+.icon-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.icon-btn:hover { color: var(--fg); background: var(--hover); }
+
+.node-list { overflow-y: auto; padding: 6px; }
+
+.node-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.node-row:hover { background: var(--hover); }
+.node-row.selected { background: var(--hover); box-shadow: inset 0 0 0 1px var(--cyan); }
+
+.node-main { flex: 1; min-width: 0; }
+.node-name { font-size: 12.5px; color: var(--fg); }
+
+/* 节点支持的协议标签：IPv4 / IPv6 */
+.node-fam {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.node-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-best {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--cyan);
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.node-head {
+  padding: 0 2px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.node-rtt {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.node-rtt.good { color: var(--cyan); }
+
+/* toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%) translateY(14px);
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  color: var(--fg);
+  font-size: 12px;
+  padding: 9px 15px;
+  border-radius: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 60;
+}
+
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------------- 响应式 ---------------- */
+
+@media (max-width: 720px) {
+  .main { padding: 30px 18px 46px; }
+  .toolbar { margin-bottom: 26px; }
+  .lang-btn > span { display: none; }
+  .header-inner { gap: 0; }
+  .dial { width: clamp(176px, 52vw, 220px); }
+  .dial.gauge { width: min(78vw, 320px); }
+  .metric-top { gap: 34px; }
+  .mt-item { min-width: 92px; }
+  .ping-row { gap: 16px; font-size: 12.5px; }
+  .conn-row { column-gap: 8px; margin-top: 26px; width: 100%; }
+  .conn-icons { gap: 6px; }
+  .ico { width: 28px; height: 28px; }
+  .ico svg { width: 15px; height: 15px; }
+  .cb-title { font-size: 13.5px; }
+  .conn-server .cb-title { max-width: 100%; }
+  .mode-block { margin-top: 14px; }
+  .proto-block { margin-top: 26px; }
+  .proto-block[hidden] + .mode-block { margin-top: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04060a">
+<title>测速报告 · SpeedTest</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/result.css">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="bar">
+    <div class="share">
+      <span class="share-label" data-i18n="share">分享</span>
+      <button class="sbtn" id="copyBtn" type="button" aria-label="复制链接" data-i18n-aria="copyLink">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.6 14.4 14.4 9.6"/><path d="M11.7 6.6 13.2 5.1a3.6 3.6 0 0 1 5.1 5.1l-1.5 1.5"/><path d="M12.3 17.4 10.8 18.9a3.6 3.6 0 0 1-5.1-5.1l1.5-1.5"/></svg>
+      </button>
+      <a class="sbtn" id="shareX" target="_blank" rel="noopener" aria-label="分享到 X" data-i18n-aria="shareToX">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.3l-4.9-6.4L6.2 22H3l7.2-8.2L1.5 2h6.4l4.6 6 5.4-6zm-1.1 18h1.7L6.3 3.8H4.5L17.8 20z"/></svg>
+      </a>
+      <a class="sbtn" id="shareFB" target="_blank" rel="noopener" aria-label="分享到 Facebook" data-i18n-aria="shareToFB">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M13.5 22v-8h2.8l.5-3.4h-3.3V8.4c0-1 .3-1.7 1.7-1.7h1.7V3.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.6H7.4V14h2.5v8h3.6z"/></svg>
+      </a>
+      <button class="sbtn" id="shareMore" type="button" aria-label="更多分享方式" data-i18n-aria="moreShare">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>
+      </button>
+    </div>
+
+    <div class="rid">
+      <div class="rid-line"><span data-i18n="resultId">Result ID</span>: <b id="rid">--</b></div>
+      <div class="rid-time" id="ridTime"></div>
+    </div>
+
+    <div class="nav">
+      <div class="lang-wrap">
+        <button class="lang-btn" id="langBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Languages menu" data-i18n-aria="languagesMenu">
+          <span id="langLabel">中文(简体)</span>
+          <svg class="lang-caret" viewBox="0 0 19 19" width="15" height="15" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="m5.25 5.335 4.5 4.5 4.5-4.5 1.5 1.5-6 6-6-6z" clip-rule="evenodd"/>
+          </svg>
+        </button>
+        <div class="lang-panel" id="langPanel" role="menu" hidden>
+          <button type="button" data-lang="zh" role="menuitem">中文(简体)</button>
+          <button type="button" data-lang="en" role="menuitem">English</button>
+        </div>
+      </div>
+      <a class="nav-link" href="/">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="m7.9 12.3 2.8 2.8 5.4-5.6"/></svg>
+        <span data-i18n="results">结果</span>
+      </a>
+      <div class="set-wrap">
+        <button class="nav-link" id="setBtn" type="button" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.9l1.6 1.9 2.4-.6.6 2.4 2.3 1-.7 2.4 1.7 1.9-1.7 1.9.7 2.4-2.3 1-.6 2.4-2.4-.6L12 21.1l-1.6-1.9-2.4.6-.6-2.4-2.3-1 .7-2.4L4.1 12l1.7-1.9-.7-2.4 2.3-1 .6-2.4 2.4.6z"/><circle cx="12" cy="12" r="3.1"/></svg>
+          <span data-i18n="settings">设置</span>
+        </button>
+
+        <!-- 设置面板：与原版报告页一致（全局设置 + 服务器），改完立即作用在本页数字上 -->
+        <div class="set-panel" id="setPanel" hidden>
+          <h3 class="set-title" data-i18n="settings">设置</h3>
+          <div class="set-head" data-i18n="globalSettings">全局设置</div>
+
+          <div class="set-row">
+            <span class="set-key" data-i18n="spTime">时间</span>
+            <div class="set-opts" data-pref="time">
+              <button class="set-opt" type="button" data-val="12" data-i18n="sp12">12 小时</button>
+              <button class="set-opt" type="button" data-val="24" data-i18n="sp24">24 小时</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <span class="set-key" data-i18n="spDate">日期</span>
+            <select class="set-select" id="setDateFmt" data-pref="date" aria-label="日期格式">
+              <option value="mdy">MM/DD/YYYY</option>
+              <option value="ymd">YYYY/MM/DD</option>
+              <option value="dmy">DD/MM/YYYY</option>
+            </select>
+          </div>
+          <div class="set-row">
+            <span class="set-key" data-i18n="spDistance">距离</span>
+            <div class="set-opts" data-pref="dist">
+              <button class="set-opt" type="button" data-val="mi" data-i18n="spMiles">英里</button>
+              <button class="set-opt" type="button" data-val="km" data-i18n="spKm">公里</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <span class="set-key" data-i18n="spSpeed">速度</span>
+            <div class="set-opts" data-pref="speed">
+              <button class="set-opt" type="button" data-val="mbps">Mbps</button>
+              <button class="set-opt" type="button" data-val="kbps">Kbps</button>
+            </div>
+          </div>
+
+          <div class="set-row set-row-server">
+            <span class="set-key" data-i18n="spServer">服务器</span>
+            <div class="set-server">
+              <div class="set-server-name" id="setServer">--</div>
+              <a class="set-link" href="/" data-i18n="changeServer">更换节点</a>
+            </div>
+          </div>
+
+          <div class="set-preview" id="setPreview"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <!-- 上半区：左边 GO，右边结果（下载 / 上传 / Ping 行 / 体验评级） -->
+    <div class="head">
+      <a class="go" href="/" title="重新测速" data-i18n-title="startTest"><span>GO</span></a>
+
+      <div class="head-main">
+        <div class="metrics">
+          <div class="m-item">
+            <div class="m-label">
+              <svg class="mico dl" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9.4" stroke-width="1.5"/>
+                <path d="M12 7.4v8.9M8.8 13 12 16.2 15.2 13" stroke-width="2.1"/>
+              </svg>
+              <span data-i18n="download">下载</span> <span id="downUnit">Mbps</span>
+            </div>
+            <div class="m-num" id="down">--</div>
+          </div>
+          <div class="m-item">
+            <div class="m-label">
+              <svg class="mico ul" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9.4" stroke-width="1.5"/>
+                <path d="M12 16.6V7.7M8.8 11 12 7.8 15.2 11" stroke-width="2.1"/>
+              </svg>
+              <span data-i18n="upload">上传</span> <span id="upUnit">Mbps</span>
+            </div>
+            <div class="m-num" id="up">--</div>
+          </div>
+        </div>
+
+        <div class="pingline">
+          <span class="pf-cap">Ping <span>ms</span></span>
+          <span class="pf-v" data-i18n-title="pingTip" title="延迟">
+            <svg class="pico gold" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+              <path d="M16.5 9.3H8.5l2.1-2.1M7.5 14.7h8l-2.1 2.1" stroke-width="1.9"/>
+            </svg><b id="ping">--</b>
+          </span>
+          <span class="pf-v" data-i18n-title="jitterTip" title="抖动">
+            <svg class="pico teal" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+              <path d="M12 7.3v9.1M8.8 13.2 12 16.4l3.2-3.2" stroke-width="2"/>
+            </svg><b id="jitter">--</b>
+          </span>
+          <span class="pf-v" data-i18n-title="lossTip" title="丢包">
+            <svg class="pico violet" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+              <path d="M12 16.7V7.6M8.8 10.8 12 7.6l3.2 3.2" stroke-width="2"/>
+            </svg><b id="loss">--</b>
+          </span>
+        </div>
+
+        <!-- 体验指标：浏览网页 / 游戏 / 视频 / 通话，各 5 点评级（图标与原版一致） -->
+        <div class="exp-row" id="expRow">
+          <div class="exp" data-exp="web" data-i18n-title="expWeb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+              <rect x="2.4" y="4.9" width="19.2" height="14.2" rx="1.5"/>
+              <circle cx="5.5" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+              <circle cx="7.9" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+              <circle cx="10.3" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+              <path d="M5.2 10.6h13.6"/>
+              <rect x="5.1" y="13.3" width="3.5" height="3.3" fill="currentColor" stroke="none"/>
+              <path d="M11.3 12.1 18 15l-2.8.9-.9 2.8z" fill="currentColor" stroke="currentColor" stroke-width=".7"/>
+            </svg>
+            <div class="exp-dots"></div>
+          </div>
+          <div class="exp" data-exp="game" data-i18n-title="expGame">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M8.1 5.3h7.8c2.9 0 5.2 2.7 5.2 6.2 0 3.2-1.3 6-3.2 6-1.5 0-2.6-1.3-3.8-3H10c-1.2 1.7-2.3 3-3.8 3-1.9 0-3.2-2.8-3.2-6 0-3.5 2.3-6.2 5.1-6.2z"/>
+              <path d="M7.6 10.2v3.2M6 11.8h3.2" stroke-width="2.4"/>
+              <circle cx="16.3" cy="10.4" r=".72" fill="currentColor" stroke="none"/>
+              <circle cx="18.1" cy="12" r=".72" fill="currentColor" stroke="none"/>
+              <circle cx="16.3" cy="13.6" r=".72" fill="currentColor" stroke="none"/>
+              <circle cx="14.5" cy="12" r=".72" fill="currentColor" stroke="none"/>
+            </svg>
+            <div class="exp-dots"></div>
+          </div>
+          <div class="exp" data-exp="video" data-i18n-title="expVideo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+              <rect x="2.4" y="4.9" width="19.2" height="14.2" rx="1.5"/>
+              <path d="M9.9 9.1 14.6 12l-4.7 2.9z" fill="currentColor" stroke="currentColor" stroke-width=".6"/>
+              <path d="M6.3 15.8h10.4"/>
+              <circle cx="5" cy="15.8" r=".75" fill="currentColor" stroke="none"/>
+            </svg>
+            <div class="exp-dots"></div>
+          </div>
+          <div class="exp" data-exp="call" data-i18n-title="expCall">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+              <rect x="2.4" y="5.1" width="19.2" height="13.8" rx="1.5"/>
+              <circle cx="10.6" cy="10.5" r="2.9" fill="currentColor" stroke="none"/>
+              <path d="M5.8 16.4c0-2.2 2.1-3.6 4.8-3.6s4.8 1.4 4.8 3.6z" fill="currentColor" stroke="none"/>
+              <g opacity=".45">
+                <rect x="15.5" y="6.6" width="5" height="4" rx=".4" fill="currentColor" stroke="none"/>
+                <circle cx="18" cy="7.9" r=".72" fill="var(--card)" stroke="none"/>
+                <path d="M16.8 9.7c0-.6.5-1 1.2-1s1.2.4 1.2 1z" fill="var(--card)" stroke="none"/>
+              </g>
+            </svg>
+            <div class="exp-dots"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下半区：左边连接信息，右边推荐评分 -->
+    <div class="body">
+      <div class="side">
+        <div class="info">
+          <div class="row" id="protoRow" hidden>
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.2 12h17.6"/><path d="M12 3c2.5 2.4 3.8 5.6 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.6-3.8-9S9.5 5.4 12 3z"/></svg>
+            </span>
+            <div class="rt">
+              <div class="rt-1" data-i18n="ipVersion">IP 协议</div>
+              <div class="rt-2" id="protoMode">IPv4</div>
+            </div>
+          </div>
+
+          <!-- 连接方式：三条虚线箭头，与原版一致 -->
+          <div class="row">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.6 7.4h2.8" stroke-dasharray="1.2 1.5"/>
+                <path d="M11 7.4h5M13.8 5.4l2 2-2 2"/>
+                <path d="M4.6 12h2.8" stroke-dasharray="1.2 1.5"/>
+                <path d="M11 12h5M13.8 10l2 2-2 2"/>
+                <path d="M4.6 16.6h2.8" stroke-dasharray="1.2 1.5"/>
+                <path d="M11 16.6h5M13.8 14.6l2 2-2 2"/>
+              </svg>
+            </span>
+            <div class="rt">
+              <div class="rt-1" data-i18n="connections">连接</div>
+              <div class="rt-2" id="connMode">多重</div>
+            </div>
+          </div>
+
+          <!-- 本次测速消耗的流量（下载 + 上传） -->
+          <div class="row" id="trafficRow" hidden>
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 4.6v9.2M6.6 11.4 9 13.8l2.4-2.4"/>
+                <path d="M15 19.4v-9.2M12.6 12.6 15 10.2l2.4 2.4"/>
+              </svg>
+            </span>
+            <div class="rt">
+              <div class="rt-1" data-i18n="trafficUsed">消耗流量</div>
+              <div class="rt-2" id="traffic">--</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="8.6" r="3"/><path d="M6.2 19c0-3.1 2.6-5.2 5.8-5.2s5.8 2.1 5.8 5.2"/></svg>
+            </span>
+            <div class="rt">
+              <div class="rt-1" id="isp">未知运营商</div>
+              <div class="rt-2" id="ip">--</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="8.8" y="4.2" width="6.4" height="4.8" rx="1"/>
+                <path d="M9.9 6.6h4.2M9.9 7.6h4.2"/>
+                <rect x="2.6" y="9.6" width="6.4" height="4.8" rx="1"/>
+                <path d="M3.7 12h4.2M3.7 13h4.2"/>
+                <rect x="15" y="9.6" width="6.4" height="4.8" rx="1"/>
+                <path d="M16.1 12h4.2M16.1 13h4.2"/>
+              </svg>
+            </span>
+            <div class="rt">
+              <div class="rt-1" id="nodeName">--</div>
+              <div class="rt-2" id="nodeLoc"></div>
+            </div>
+          </div>
+
+          <a class="change" href="/" data-i18n="changeServer">Change Server</a>
+        </div>
+      </div>
+
+      <div class="main">
+        <!-- 逐秒曲线：上下行叠加在同一根 15 秒轴上，拖动查看每一秒 -->
+        <section class="tl" id="tlBox" hidden>
+          <div class="tl-head">
+            <span class="tl-title" data-i18n="tlTitle">逐秒曲线</span>
+            <div class="tl-legend">
+              <span class="lg dl"><i></i><span data-i18n="download">下载</span></span>
+              <span class="lg ul"><i></i><span data-i18n="upload">上传</span></span>
+            </div>
+            <span class="tl-hint" data-i18n="tlHint">按住拖动查看每秒数据</span>
+          </div>
+          <div class="tl-plot" id="tlPlot">
+            <div class="tl-tip" id="tlTip" hidden></div>
+          </div>
+        </section>
+
+        <div class="rate" id="rate">
+          <div class="rate-q"><span data-i18n="rateQPrefix">您向好友或同事推荐</span> <b id="rateIsp">本网络</b> <span data-i18n="rateQSuffix">的可能性有多大？</span></div>
+          <div class="scale" id="scale"></div>
+          <div class="scale-ends"><span data-i18n="rateNo">根本不可能</span><span data-i18n="rateYes">非常有可能</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/routes.js"></script>
+<script src="/prefs.js"></script>
+<script src="/i18n.js"></script>
+<script src="/result.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+# ===== 主控版（完整站点：web + 后台 + 测速）=====
+# 一键部署：docker compose up -d --build
+# 从 GitHub 拉取镜像部署：把 IMAGE 填成 ghcr.io/你的用户名/仓库名:版本，然后 docker compose up -d
+services:
+  speedtest:
+    # image 与 build 同时写：本地 --build 时用源码构建；只 up -d 时若无本地镜像会尝试拉 image
+    image: "${IMAGE:-speedtest-site:1.2.36}"
+    build:
+      context: .
+    container_name: speedtest
+    restart: unless-stopped
+    # 主控版默认 APP_MODE=controller；只监听本机回环，由反代转发，避免绕过反代直连明文端口
+    network_mode: host
+    environment:
+      APP_MODE: "controller"
+      DATA_DIR: /data
+      HTTP_HOST: "${HTTP_HOST:-127.0.0.1}"
+      HTTP_PORT: "${HOST_PORT:-3333}"
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1,::1}"
+      # 三家 CDN 专有头全信任，X-Real-IP 兜底；换 CDN 不用改这里
+      TRUSTED_IP_HEADERS: "${TRUSTED_IP_HEADERS:-CF-Connecting-IP,EO-Connecting-IP,Ali-Cdn-Real-Ip,X-Real-IP}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
+      ADMIN_USER: "${ADMIN_USER:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      ADMIN_PATH: "${ADMIN_PATH:-}"
+      SITE_NAME: "${SITE_NAME:-SpeedTest}"
+      SITE_TITLE_SUFFIX: "${SITE_TITLE_SUFFIX:-}"
+      NODE_NAME: "${NODE_NAME:-本地节点}"
+      NODE_LOCATION: "${NODE_LOCATION:-中国}"
+      NODE_SPONSOR: "${NODE_SPONSOR:-自建机房}"
+      NODE_URL: "${NODE_URL:-}"
+      NODE_URL6: "${NODE_URL6:-}"
+      LOG_CLIENT_IP: "${LOG_CLIENT_IP:-0}"
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535

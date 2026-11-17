@@ -1,0 +1,11 @@
+data/
+*.log
+.git/
+.github/
+.gitignore
+README.md
+deploy.sh
+node_modules/
+.env
+.env.*
+.deploy_*

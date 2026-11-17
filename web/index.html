@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>SpeedTest</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="/">
+      <svg class="logo-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--cyan)" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="logo-text" id="siteName">SPEEDTEST</span>
+    </a>
+
+    <div class="menu-wrap">
+      <button class="hbtn" id="menuBtn" type="button">
+        <span data-i18n="menu">菜单</span>
+        <svg viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </button>
+      <div class="menu-panel" id="menuPanel" hidden>
+        <button type="button" data-act="results" data-i18n="results">结果</button>
+        <button type="button" data-act="settings" data-i18n="settings">设置</button>
+        <!-- 摆设：后台入口只在隐藏路径上，首页不放任何真实链接 -->
+        <button type="button" data-fake-admin data-i18n="admin">管理后台</button>
+      </div>
+    </div>
+
+    <!-- 语言切换：文字 + 箭头，点击展开，与 speedtest.net 一致 -->
+    <div class="lang-wrap">
+      <button class="lang-btn" id="langBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Languages menu" data-i18n-aria="languagesMenu">
+        <span id="langLabel">中文(简体)</span>
+        <svg class="lang-caret" viewBox="0 0 19 19" width="17" height="17" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="m5.25 5.335 4.5 4.5 4.5-4.5 1.5 1.5-6 6-6-6z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+      <div class="lang-panel" id="langPanel" role="menu" hidden>
+        <div class="lang-title" data-i18n="langTitle">语言</div>
+        <button type="button" data-lang="zh" role="menuitem">中文(简体)</button>
+        <button type="button" data-lang="en" role="menuitem">English</button>
+      </div>
+    </div>
+
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="切换主题" data-i18n-aria="toggleTheme">
+      <svg class="i-sun" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" stroke-linecap="round"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" stroke-linejoin="round"/></svg>
+    </button>
+
+    <div class="header-right">
+      <button class="pill-btn" type="button" data-fake-admin data-i18n="admin">管理后台</button>
+    </div>
+  </div>
+</header>
+<div class="rainbow"></div>
+
+<main class="main">
+  <div class="stage">
+  <div class="stage-inner">
+
+  <div class="toolbar">
+    <button class="tiny-btn" id="resultsBtn" type="button">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke-linecap="round"/></svg>
+      <span data-i18n="results">结果</span>
+    </button>
+    <button class="tiny-btn" id="settingsBtn" type="button">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+      <span data-i18n="settings">设置</span>
+    </button>
+  </div>
+
+  <!-- 测速中的下载 / 上传（图标与原版一致：青绿圆圈下箭头 / 紫色圆圈上箭头） -->
+  <div class="metric-top" id="metricTop" hidden>
+    <div class="mt-item">
+      <div class="mt-label">
+        <svg class="mico dl" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.4" stroke-width="1.5"/>
+          <path d="M12 7.4v8.9M8.8 13 12 16.2 15.2 13" stroke-width="2.1"/>
+        </svg>
+        <span data-i18n="download">下载</span> <span class="mt-unit">Mbps</span>
+      </div>
+      <div class="mt-num" id="mtDown">--</div>
+    </div>
+    <div class="mt-item" id="mtUpItem">
+      <div class="mt-label">
+        <svg class="mico ul" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.4" stroke-width="1.5"/>
+          <path d="M12 16.6V7.7M8.8 11 12 7.8 15.2 11" stroke-width="2.1"/>
+        </svg>
+        <span data-i18n="upload">上传</span> <span class="mt-unit">Mbps</span>
+      </div>
+      <div class="mt-num" id="mtUp">--</div>
+    </div>
+  </div>
+
+  <div class="ping-row" id="pingRow" hidden>
+    <span class="ping-cap">Ping <span>ms</span></span>
+    <span class="ping-val" data-i18n-title="pingTip" title="延迟">
+      <svg class="pico gold" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+        <path d="M16.5 9.3H8.5l2.1-2.1M7.5 14.7h8l-2.1 2.1" stroke-width="1.9"/>
+      </svg>
+      <b id="pgPing">--</b>
+    </span>
+    <span class="ping-val" data-i18n-title="jitterTip" title="抖动">
+      <svg class="pico teal" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+        <path d="M12 7.3v9.1M8.8 13.2 12 16.4l3.2-3.2" stroke-width="2"/>
+      </svg>
+      <b id="pgJitter">--</b>
+    </span>
+    <span class="ping-val" data-i18n-title="lossTip" title="丢包">
+      <svg class="pico violet" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
+        <path d="M12 16.7V7.6M8.8 10.8 12 7.6l3.2 3.2" stroke-width="2"/>
+      </svg>
+      <b id="pgLoss">--</b>
+    </span>
+  </div>
+
+  <!-- 体验指标：浏览网页 / 游戏 / 视频 / 通话，图标与原版一致 -->
+  <div class="exp-row" id="expRow" hidden>
+    <div class="exp" data-exp="web" data-i18n-title="expWeb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="2.4" y="4.9" width="19.2" height="14.2" rx="1.5"/>
+        <circle cx="5.5" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+        <circle cx="7.9" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+        <circle cx="10.3" cy="7.9" r=".72" fill="currentColor" stroke="none"/>
+        <path d="M5.2 10.6h13.6"/>
+        <rect x="5.1" y="13.3" width="3.5" height="3.3" fill="currentColor" stroke="none"/>
+        <path d="M11.3 12.1 18 15l-2.8.9-.9 2.8z" fill="currentColor" stroke="currentColor" stroke-width=".7"/>
+      </svg>
+      <div class="exp-dots"></div>
+    </div>
+    <div class="exp" data-exp="game" data-i18n-title="expGame">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M8.1 5.3h7.8c2.9 0 5.2 2.7 5.2 6.2 0 3.2-1.3 6-3.2 6-1.5 0-2.6-1.3-3.8-3H10c-1.2 1.7-2.3 3-3.8 3-1.9 0-3.2-2.8-3.2-6 0-3.5 2.3-6.2 5.1-6.2z"/>
+        <path d="M7.6 10.2v3.2M6 11.8h3.2" stroke-width="2.4"/>
+        <circle cx="16.3" cy="10.4" r=".72" fill="currentColor" stroke="none"/>
+        <circle cx="18.1" cy="12" r=".72" fill="currentColor" stroke="none"/>
+        <circle cx="16.3" cy="13.6" r=".72" fill="currentColor" stroke="none"/>
+        <circle cx="14.5" cy="12" r=".72" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="exp-dots"></div>
+    </div>
+    <div class="exp" data-exp="video" data-i18n-title="expVideo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="2.4" y="4.9" width="19.2" height="14.2" rx="1.5"/>
+        <path d="M9.9 9.1 14.6 12l-4.7 2.9z" fill="currentColor" stroke="currentColor" stroke-width=".6"/>
+        <path d="M6.3 15.8h10.4"/>
+        <circle cx="5" cy="15.8" r=".75" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="exp-dots"></div>
+    </div>
+    <div class="exp" data-exp="call" data-i18n-title="expCall">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="2.4" y="5.1" width="19.2" height="13.8" rx="1.5"/>
+        <circle cx="10.6" cy="10.5" r="2.9" fill="currentColor" stroke="none"/>
+        <path d="M5.8 16.4c0-2.2 2.1-3.6 4.8-3.6s4.8 1.4 4.8 3.6z" fill="currentColor" stroke="none"/>
+        <g opacity=".45">
+          <rect x="15.5" y="6.6" width="5" height="4" rx=".4" fill="currentColor" stroke="none"/>
+          <circle cx="18" cy="7.9" r=".72" fill="var(--bg)" stroke="none"/>
+          <path d="M16.8 9.7c0-.6.5-1 1.2-1s1.2.4 1.2 1z" fill="var(--bg)" stroke="none"/>
+        </g>
+      </svg>
+      <div class="exp-dots"></div>
+    </div>
+  </div>
+
+  <div class="dial" id="dial" data-mode="multi" role="button" tabindex="0" aria-label="开始测速" data-i18n-aria="startTest">
+    <svg class="dial-svg" viewBox="0 0 240 240" aria-hidden="true">
+      <defs>
+        <linearGradient id="ringGrad" gradientUnits="userSpaceOnUse" x1="12" y1="10" x2="230" y2="228">
+          <stop offset="0%" stop-color="#2de5d1"/>
+          <stop offset="100%" stop-color="#1fa4e9"/>
+        </linearGradient>
+      </defs>
+      <circle class="dial-track" cx="120" cy="120" r="110"/>
+      <circle class="dial-arc" id="arc" cx="120" cy="120" r="110" transform="rotate(-90 120 120)"/>
+    </svg>
+
+    <svg class="gauge-svg" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <linearGradient id="gaugeGrad" gradientUnits="userSpaceOnUse" x1="94" y1="306" x2="306" y2="94">
+          <stop offset="0%" stop-color="#1f5cff"/>
+          <stop offset="42%" stop-color="#2b9fe0"/>
+          <stop offset="100%" stop-color="#7cf6ff"/>
+        </linearGradient>
+        <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="200" x2="200" y2="116">
+          <stop offset="0%" stop-color="#6f7885" stop-opacity="0.05"/>
+          <stop offset="55%" stop-color="#cfd7e2" stop-opacity="0.75"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <path class="gauge-track" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
+      <path class="gauge-arc" id="gaugeArc" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
+      <g class="gauge-ticks" id="gaugeTicks"></g>
+      <g class="gauge-needle" id="gaugeNeedle">
+        <polygon points="196.9,200 203.1,200 202.2,118 197.8,118" fill="url(#needleGrad)"/>
+      </g>
+    </svg>
+
+    <div class="dial-center">
+      <div class="dial-phase" id="phaseLabel"></div>
+      <div class="dial-value" id="dialValue">GO</div>
+      <div class="dial-unit">
+        <svg class="du-ico du-dl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.2" stroke-width="1.8"/>
+          <path d="M12 6.8v9.4M8.4 12.8 12 16.4l3.6-3.6" stroke-width="2.4"/>
+        </svg>
+        <svg class="du-ico du-ul" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.2" stroke-width="1.8"/>
+          <path d="M12 17.2V7.8M8.4 11.2 12 7.6l3.6 3.6" stroke-width="2.4"/>
+        </svg>
+        <span id="dialUnit"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-bar" id="resultBar" hidden>
+    <span class="rb-label" data-i18n="resultId">结果 ID</span>
+    <b class="rb-id" id="resultId">--</b>
+    <button class="rb-btn" id="copyResult" type="button" data-i18n="copyLink">复制链接</button>
+    <a class="rb-btn" id="openResult" href="/" data-i18n="viewReport">查看报告</a>
+  </div>
+
+  <!-- 访客网络 · 功能区 · 测速节点，中间两颗圆形按钮与 speedtest.net 一致 -->
+  <div class="conn-row">
+    <div class="conn-side conn-client">
+      <div class="cb-title"><span id="ispName" data-i18n="yourNetwork">你的网络</span><span class="asn-tag" id="asnTag" hidden></span></div>
+      <div class="cb-sub" id="ipText" data-i18n="detecting">正在获取…</div>
+    </div>
+
+    <div class="conn-icons">
+      <button class="ico" id="clientIco" type="button" aria-label="你的网络" data-i18n-aria="yourNetwork">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <circle cx="12" cy="8.1" r="3.5"/>
+          <path d="M5.5 19.6c0-3.3 2.9-5.6 6.5-5.6s6.5 2.3 6.5 5.6"/>
+        </svg>
+      </button>
+      <button class="ico" id="serverItem" type="button" aria-label="选择测速节点" data-i18n-aria="selectServer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="8.1" y="6.3" width="7.8" height="5.6" rx="1.1"/>
+          <path d="M10 9.1h4"/>
+          <rect x="3.4" y="12.1" width="7.8" height="5.6" rx="1.1"/>
+          <path d="M5.3 14.9h4"/>
+          <rect x="12.8" y="12.1" width="7.8" height="5.6" rx="1.1"/>
+          <path d="M14.7 14.9h4"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="conn-side conn-server">
+      <div class="cb-title" id="serverName" data-i18n="finding">正在寻找最优节点…</div>
+      <div class="cb-sub" id="serverLoc"></div>
+      <button class="conn-change" id="moreBtn" type="button" data-i18n="change" hidden>更换</button>
+    </div>
+  </div>
+
+  <!-- 设置面板：点顶部的「设置」展开，选项与 speedtest.net 的 SETTINGS 一致 -->
+  <div class="settings-panel" id="settingsPanel" hidden>
+    <div class="sp-grid">
+      <section class="sp-col">
+        <h3 class="sp-head" data-i18n="globalSettings">全局设置</h3>
+        <div class="sp-row">
+          <span class="sp-key" data-i18n="spTime">时间</span>
+          <div class="sp-opts" data-pref="time">
+            <button class="sp-opt" type="button" data-val="12" data-i18n="sp12">12 小时</button>
+            <button class="sp-opt" type="button" data-val="24" data-i18n="sp24">24 小时</button>
+          </div>
+        </div>
+        <div class="sp-row">
+          <span class="sp-key" data-i18n="spDate">日期</span>
+          <select class="sp-select" id="spDateFmt" data-pref="date" aria-label="日期格式">
+            <option value="ymd">YYYY/MM/DD</option>
+            <option value="mdy">MM/DD/YYYY</option>
+            <option value="dmy">DD/MM/YYYY</option>
+          </select>
+        </div>
+        <div class="sp-row">
+          <span class="sp-key" data-i18n="spDistance">距离</span>
+          <div class="sp-opts" data-pref="dist">
+            <button class="sp-opt" type="button" data-val="mi" data-i18n="spMiles">英里</button>
+            <button class="sp-opt" type="button" data-val="km" data-i18n="spKm">公里</button>
+          </div>
+        </div>
+        <div class="sp-row">
+          <span class="sp-key" data-i18n="spSpeed">速度</span>
+          <div class="sp-opts" data-pref="speed">
+            <button class="sp-opt" type="button" data-val="mbps">Mbps</button>
+            <button class="sp-opt" type="button" data-val="kbps">Kbps</button>
+          </div>
+        </div>
+        <!-- 示例行：四个选项的效果立刻可见，不用等测速 -->
+        <div class="sp-preview" id="spPreview"></div>
+      </section>
+
+      <section class="sp-col">
+        <h3 class="sp-head" data-i18n="currentConnection">当前连接</h3>
+        <div class="sp-line sp-name" id="spIsp" data-i18n="yourNetwork">你的网络</div>
+        <div class="sp-line sp-ip" id="spIp">--</div>
+        <div class="sp-line" id="spLoc">--</div>
+        <div class="sp-line" id="spGeo">--</div>
+      </section>
+
+      <section class="sp-col">
+        <h3 class="sp-head" data-i18n="testNode">测速节点</h3>
+        <div class="sp-line sp-name" id="spNode" data-i18n="finding">正在寻找最优节点…</div>
+        <div class="sp-line" id="spNodeLoc"></div>
+        <div class="sp-line" id="spNodeProto"></div>
+        <button class="sp-btn" id="spChangeNode" type="button" data-i18n="selectServer">选择测速节点</button>
+      </section>
+    </div>
+  </div>
+
+  <!-- 协议：IPv4 / IPv6（后台配了 IPv6 节点才会出现） -->
+  <div class="mode-block proto-block" id="protoBlock" hidden>
+    <div class="mode-label" data-i18n="protocol">协议</div>
+    <div class="mode-row proto-row">
+      <button class="proto-opt active" data-family="v4" type="button">IPv4</button>
+      <button class="proto-opt" data-family="v6" type="button">IPv6</button>
+    </div>
+  </div>
+
+  <div class="mode-block">
+    <div class="mode-label" data-i18n="connections">连接</div>
+    <div class="mode-row">
+      <button class="mode-opt active" data-mode="multi" type="button" data-i18n="multi">多重</button>
+      <button class="conn-toggle" id="modeToggle" type="button" aria-label="切换连接方式" data-i18n-aria="toggleConnections">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6.6 4h7.4" stroke-dasharray="2 1.8"/>
+          <path d="M13.9 1.9l2.8 2.1-2.8 2.1"/>
+          <path d="M6.6 12h7.4" stroke-dasharray="2 1.8"/>
+          <path d="M13.9 9.9l2.8 2.1-2.8 2.1"/>
+          <path d="M6.6 20h7.4" stroke-dasharray="2 1.8"/>
+          <path d="M13.9 17.9l2.8 2.1-2.8 2.1"/>
+        </svg>
+      </button>
+      <button class="mode-opt" data-mode="single" type="button" data-i18n="single">单一</button>
+    </div>
+  </div>
+  </div>
+  </div>
+</main>
+
+<footer class="site-foot" id="footNote"></footer>
+
+<!-- 节点 / 设置弹窗 -->
+<div class="modal" id="serverModal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="selectServer">选择测速节点</div>
+      <button class="icon-btn" id="closeModal" type="button" aria-label="关闭" data-i18n-aria="close">✕</button>
+    </div>
+    <div class="node-list" id="nodeList"></div>
+  </div>
+</div>
+
+<!-- 本机测速历史：点「结果」打开，记录存在这台浏览器里 -->
+<div class="modal" id="historyModal" hidden>
+  <div class="modal-panel hist-panel" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="histTitle">测速历史</div>
+      <button class="icon-btn" id="histClose" type="button" aria-label="关闭" data-i18n-aria="close">✕</button>
+    </div>
+    <div class="hist-list" id="histList"></div>
+    <div class="hist-foot">
+      <span class="hist-count" id="histCount"></span>
+      <button class="tiny-btn" id="histClear" type="button" data-i18n="histClear">清空历史</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/routes.js"></script>
+<script src="/prefs.js"></script>
+<script src="/i18n.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
