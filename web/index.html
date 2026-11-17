@@ -197,21 +197,26 @@
     <svg class="gauge-svg" viewBox="0 0 400 400" aria-hidden="true">
       <defs>
         <linearGradient id="gaugeGrad" gradientUnits="userSpaceOnUse" x1="94" y1="306" x2="306" y2="94">
-          <stop offset="0%" stop-color="#2450e8"/>
-          <stop offset="42%" stop-color="#2f9fe0"/>
-          <stop offset="100%" stop-color="#4fd6e8"/>
-        </linearGradient>
-        <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="200" x2="200" y2="116">
-          <stop offset="0%" stop-color="#6f7885" stop-opacity="0.05"/>
-          <stop offset="55%" stop-color="#cfd7e2" stop-opacity="0.75"/>
-          <stop offset="100%" stop-color="#ffffff" stop-opacity="1"/>
+          <stop offset="0%" stop-color="#1f5dff"/>
+          <stop offset="55%" stop-color="#6ae3f8"/>
+          <stop offset="100%" stop-color="#56cdec"/>
         </linearGradient>
       </defs>
       <path class="gauge-track" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
       <path class="gauge-arc" id="gaugeArc" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
       <g class="gauge-ticks" id="gaugeTicks"></g>
+    </svg>
+
+    <svg class="needle-svg" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="203" x2="200" y2="122">
+          <stop offset="0%" stop-color="#7d8794" stop-opacity="0.28"/>
+          <stop offset="60%" stop-color="#aab4c1" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#eef3f9" stop-opacity="0.88"/>
+        </linearGradient>
+      </defs>
       <g class="gauge-needle" id="gaugeNeedle">
-        <polygon points="196.9,200 203.1,200 202.2,118 197.8,118" fill="url(#needleGrad)"/>
+        <polygon points="198.5,203 201.5,203 211,122 189,122" fill="url(#needleGrad)"/>
       </g>
     </svg>
 

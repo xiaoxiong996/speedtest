@@ -130,7 +130,7 @@
   };
   var GAUGE_COLORS = {
     // 原版 speedtest.net：左下深蓝 → 中段蓝 → 顶部/右上亮青（不过分发白）
-    multi: ["#2450e8", "#2f9fe0", "#4fd6e8"],
+    multi: ["#1f5dff", "#6ae3f8", "#56cdec"],
     single: ["#ffd684", "#ffab7a", "#ff886a"]
   };
 
@@ -289,10 +289,49 @@
     return state.mode === "single" ? 1 : Math.max(1, state.settings.maxConnections || 4);
   }
 
+  /* 原版 speedtest.net 的仪表刻度：一组固定档位标签在弧上【等角度均布】，
+     指针/弧填充在相邻档位之间按数值线性插值（不是对数！）。
+     实测原版 max=1000：0/5/10/50/100/250/500/750/1000 均分 270°，误差<2°。 */
+  var TICK_LADDERS = [
+    { max: 10,    vals: [0, 1, 2, 5, 10] },
+    { max: 25,    vals: [0, 1, 5, 10, 25] },
+    { max: 50,    vals: [0, 5, 10, 25, 50] },
+    { max: 100,   vals: [0, 5, 10, 25, 50, 100] },
+    { max: 250,   vals: [0, 5, 10, 50, 100, 250] },
+    { max: 500,   vals: [0, 10, 25, 50, 100, 250, 500] },
+    { max: 1000,  vals: [0, 5, 10, 50, 100, 250, 500, 750, 1000] },
+    { max: 2500,  vals: [0, 50, 100, 250, 500, 1000, 2500] },
+    { max: 5000,  vals: [0, 100, 250, 500, 1000, 2500, 5000] },
+    { max: 10000, vals: [0, 250, 500, 1000, 2500, 5000, 10000] }
+  ];
+
+  var _ladderCache = { max: -1, vals: null };
+
+  function tickLadder(max) {
+    if (_ladderCache.max === max && _ladderCache.vals) return _ladderCache.vals;
+    var base = null;
+    for (var i = 0; i < TICK_LADDERS.length; i++) {
+      if (max <= TICK_LADDERS[i].max) { base = TICK_LADDERS[i].vals; break; }
+    }
+    if (!base) base = TICK_VALUES;
+    var vals = base.filter(function (v) { return v <= max; });
+    if (!vals.length || vals[vals.length - 1] !== max) vals.push(max);
+    _ladderCache = { max: max, vals: vals };
+    return vals;
+  }
+
   function speedToProgress(v, max) {
     if (v <= 0) return 0;
-    var p = Math.log10(1 + v) / Math.log10(1 + max);
-    return Math.max(0, Math.min(1, p));
+    var vals = tickLadder(max);
+    var n = vals.length;
+    if (n < 2 || v >= vals[n - 1]) return 1;
+    for (var i = 0; i < n - 1; i++) {
+      if (v <= vals[i + 1]) {
+        var f = (v - vals[i]) / (vals[i + 1] - vals[i]);
+        return Math.max(0, Math.min(1, (i + f) / (n - 1)));
+      }
+    }
+    return 1;
   }
 
   function setArc(speed, max) {
@@ -335,11 +374,12 @@
   }
 
   function buildTicks(max) {
-    var vals = TICK_VALUES.filter(function (v) { return v <= max; });
-    if (!vals.length || vals[vals.length - 1] !== max) vals.push(max);
+    // 刻度档位等角度均布：第 i 档位于弧的 i/(n-1) 处（与原版一致）
+    var vals = tickLadder(max);
+    var n = vals.length;
     var out = "";
-    vals.forEach(function (v) {
-      var p = speedToProgress(v, max);
+    vals.forEach(function (v, i) {
+      var p = n > 1 ? i / (n - 1) : 0;
       var a = ((G.start + p * G.sweep) * Math.PI) / 180;
       var x = G.cx + Math.cos(a) * G.tickR;
       var y = G.cy + Math.sin(a) * G.tickR;

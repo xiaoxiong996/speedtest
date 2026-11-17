@@ -9,7 +9,7 @@
 #  - 根文件系统只读 + 丢弃所有 Linux capabilities + 禁止提权
 services:
   speedtest-node:
-    image: "${IMAGE:-speedtest-node:1.2.38}"
+    image: "${IMAGE:-speedtest-node:1.2.40}"
     build:
       context: .
     container_name: speedtest-node

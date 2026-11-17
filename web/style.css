@@ -20,7 +20,8 @@
   --panel-line: rgba(255, 255, 255, 0.12);
   --header-bg: rgba(0, 0, 0, 0.72);
   --link: #339fe0;
-  --gauge-track: #1b2233;
+  --gauge-track: #232a3d;
+  --gauge-tick: #9aa5b1;
   --dot-off: rgba(255, 255, 255, 0.24);
   --mode-multi: #43b7ff;
   --mode-single: #ff9166;
@@ -52,6 +53,7 @@
   --header-bg: rgba(255, 255, 255, 0.82);
   --link: #1a7fbf;
   --gauge-track: #e4e8ee;
+  --gauge-tick: #6b7280;
   --dot-off: rgba(0, 0, 0, 0.2);
   --mode-multi: #0076c9;
   --mode-single: #e56b4f;
@@ -424,18 +426,18 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.dial.gauge { width: clamp(272px, 24vw, 334px); }
+.dial.gauge { width: clamp(320px, 32vw, 360px); }
 
 /* 表盘中心大数字：原版 speedtest.net 用 Montserrat Light（细体 300）、大号 */
 .dial.gauge .dial-value {
-  font-size: clamp(40px, 4vw, 52px);
-  font-weight: 300;
-  letter-spacing: -0.01em;
+  font-size: clamp(32px, 3.3vw, 40px);
+  font-weight: 400;
+  letter-spacing: 0;
 }
 .dial.gauge .dial-value.num {
-  font-size: clamp(44px, 4.6vw, 56px);
-  font-weight: 300;
-  letter-spacing: -0.02em;
+  font-size: clamp(34px, 3.6vw, 42px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 /* Kbps 下数字会到六七位，收一点字号；再长的由 trimTicks 把重叠的刻度隐掉 */
 .dial.gauge .dial-value.xlong { font-size: clamp(26px, 2.6vw, 32px); }
@@ -521,30 +523,42 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .gauge-svg { display: none; width: 100%; height: 100%; overflow: visible; }
 .dial.gauge .dial-svg { display: none; }
 .dial.gauge .gauge-svg { display: block; }
+.needle-svg { display: none; }
+.dial.gauge .needle-svg { display: block; }
 
 .gauge-track {
   fill: none;
   stroke: var(--gauge-track);
-  stroke-width: 34;
+  stroke-width: 24;
   stroke-linecap: round;
 }
 
 .gauge-arc {
   fill: none;
   stroke: url(#gaugeGrad);
-  stroke-width: 34;
+  stroke-width: 24;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 12px rgba(60, 190, 255, 0.55));
+  filter: drop-shadow(0 0 5px rgba(60, 190, 255, 0.3));
   transition: stroke-dashoffset 0.26s linear;
 }
 
 .gauge-ticks text {
-  fill: var(--muted);
+  fill: var(--gauge-tick, var(--muted));
   font-family: inherit;
-  font-size: 11px;
-  font-weight: 300;
+  font-size: 14px;
+  font-weight: 400;
   text-anchor: middle;
   dominant-baseline: middle;
+}
+
+/* 独立指针层：盖在中心数字之上，与原版一致（针穿过数字上方） */
+.needle-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
 }
 
 .gauge-needle {
@@ -555,7 +569,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .gauge-needle polygon { filter: drop-shadow(0 0 7px rgba(220, 236, 255, 0.3)); }
 
-.dial.gauge .dial-center { padding-top: 11%; }
+.dial.gauge .dial-center { padding-top: 15%; }
 .dial.gauge .dial-unit {
   display: inline-flex;
   align-items: center;
