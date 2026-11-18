@@ -4,7 +4,7 @@
 services:
   speedtest:
     # image 与 build 同时写：本地 --build 时用源码构建；只 up -d 时若无本地镜像会尝试拉 image
-    image: "${IMAGE:-speedtest-site:1.2.40}"
+    image: "${IMAGE:-speedtest-site:1.2.41}"
     build:
       context: .
     container_name: speedtest

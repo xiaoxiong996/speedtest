@@ -564,7 +564,7 @@
   function initTheme() {
     var saved = null;
     try { saved = localStorage.getItem("st_theme"); } catch (e) {}
-    if (!saved) saved = "light";
+    if (!saved) saved = "dark";
     applyTheme(saved);
   }
 
