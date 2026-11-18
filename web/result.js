@@ -512,6 +512,7 @@
     $("jitter").textContent = fmtPing(r.jitter);
     $("loss").textContent = (r.loss || 0) + "%";
     $("connMode").textContent = r.connections > 1 ? t("multi") : t("single");
+    document.documentElement.setAttribute("data-conn", r.connections > 1 ? "multi" : "single");
     renderExp(r.download, r.upload, r.ping);
 
     // 本次测速消耗的流量：下载 + 上传

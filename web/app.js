@@ -21,6 +21,7 @@
     unit: $("dialUnit"),
     gaugeArc: $("gaugeArc"),
     gaugeTicks: $("gaugeTicks"),
+    needleGrad: $("needleGrad"),
     gaugeNeedle: $("gaugeNeedle"),
     metricTop: $("metricTop"),
     mtDown: $("mtDown"),
@@ -29,8 +30,8 @@
     pingRow: $("pingRow"),
     expRow: $("expRow"),
     pgPing: $("pgPing"),
-    pgJitter: $("pgJitter"),
-    pgLoss: $("pgLoss"),
+    pgDownLat: $("pgDownLat"),
+    pgUpLat: $("pgUpLat"),
     ispName: $("ispName"),
     clientIco: $("clientIco"),
     modeToggle: $("modeToggle"),
@@ -74,7 +75,7 @@
 
   /* ---------------- 仪表盘（测速态） ---------------- */
 
-  var G = { cx: 200, cy: 200, r: 150, start: 135, sweep: 270, tickR: 108 };
+  var G = { cx: 200, cy: 200, r: 147, start: 135, sweep: 270, tickR: 104 };
   var G_LEN = 2 * Math.PI * G.r * (G.sweep / 360);
   els.gaugeArc.style.strokeDasharray = G_LEN + " " + G_LEN;
   els.gaugeArc.style.strokeDashoffset = G_LEN;
@@ -133,6 +134,11 @@
     multi: ["#1f5dff", "#6ae3f8", "#56cdec"],
     single: ["#ffd684", "#ffab7a", "#ff886a"]
   };
+  // 上行阶段整条弧换成上行色，和顶部的上行图标同步
+  var UP_GAUGE_COLORS = {
+    multi: ["#6d28d9", "#a855f7", "#c77dff"],
+    single: ["#5fb51e", "#8fd94a", "#b6e878"]
+  };
 
   function setStops(id, colors) {
     var g = document.getElementById(id);
@@ -146,6 +152,8 @@
   function applyMode() {
     var single = state.mode === "single";
     if (els.dial) els.dial.setAttribute("data-mode", single ? "single" : "multi");
+    // 单线程是橙/绿配色，多线程是青/紫，靠根节点属性整体换色
+    document.documentElement.setAttribute("data-conn", single ? "single" : "multi");
     setStops("ringGrad", single ? RING_COLORS.single : RING_COLORS.multi);
     setStops("gaugeGrad", single ? GAUGE_COLORS.single : GAUGE_COLORS.multi);
   }
@@ -392,8 +400,15 @@
   function setGauge(speed, max) {
     if (!max) max = 1000;
     var p = speedToProgress(speed, max);
+    var deg = G.start + p * G.sweep + 90;
     els.gaugeArc.style.strokeDashoffset = G_LEN * (1 - p);
-    els.gaugeNeedle.style.transform = "rotate(" + (G.start + p * G.sweep + 90).toFixed(2) + "deg)";
+    els.gaugeNeedle.style.transform = "rotate(" + deg.toFixed(2) + "deg)";
+    // 指针的高光是「页面上亮、下方暗」的固定方向（原版如此）：
+    // 指针朝上时尖端发亮，朝左下时整体偏暗，所以渐变要反向抵消旋转
+    if (els.needleGrad) {
+      els.needleGrad.setAttribute("gradientTransform",
+        "rotate(" + (-deg).toFixed(2) + " " + G.cx + " " + G.cy + ")");
+    }
   }
 
   /* 表盘量程档位：读数稳定后收敛到一个整齐的档位，之后只往上扩，
@@ -411,26 +426,13 @@
      输入本身已经是平均值，指针只会平缓爬升；量程在读数稳定后一次性收敛。 */
   function makeMeter(startMax) {
     var ema = 0;
-    var peak = 0;
+    // 量程固定 1000 Mbps（原版就是这样，刻度不随速度变化）
     var max = startMax || 1000;
-    var locked = false;
-    var born = performance.now();
     return {
       max: function () { return max; },
       tick: function (inst) {
         if (!(inst > 0)) return;
-        if (inst > peak) peak = inst;
         ema = ema > 0 ? ema + (inst - ema) * 0.4 : inst;
-        var dirty = false;
-        // 前几秒读数还在往上爬，等它稳一点再按「见过的峰值」定一个整齐的量程，
-        // 避免开局用一个随机的低值把刻度压得太窄
-        if (!locked && performance.now() - born > 5000) {
-          var want = niceMax(peak * 1.35);
-          if (want < max) { max = want; dirty = true; }
-          locked = true;
-        }
-        if (peak > max * 0.95) { max = niceMax(peak * 1.15); dirty = true; }
-        if (dirty) buildTicks(max);
         setGauge(ema, max);
         setDial(fmtSpeed(ema), speedUnit(), "", true);
       }
@@ -548,8 +550,8 @@
     els.mtUp.textContent = "--";
     els.pingRow.hidden = false;
     els.pgPing.textContent = "--";
-    els.pgJitter.textContent = "--";
-    els.pgLoss.textContent = "--";
+    els.pgDownLat.textContent = "--";
+    els.pgUpLat.textContent = "--";
     els.expRow.hidden = false;
     renderExp(0, 0, 0);
   }
@@ -692,7 +694,7 @@
     document.title = t("pageTitle", { site: s.siteName, suffix: suffix });
     els.siteName.textContent = s.siteName;
     applySiteIcon(s.iconUrl || "");
-    gaugeMax = s.gaugeMax || 1000;
+    gaugeMax = 1000;
     els.foot.textContent = s.footerNote || "";
     els.foot.hidden = !s.footerNote;
     renderClient();
@@ -1109,6 +1111,45 @@
     });
   }
 
+  // 阶段结束后的带载延迟：连打几次取中位数
+  function measureLoadedLatency(base, n) {
+    var runs = [];
+    var chain = Promise.resolve();
+    for (var i = 0; i < (n || 3); i++) {
+      chain = chain.then(function () {
+        return pingOnce(base).then(function (ms) {
+          if (isFinite(ms) && ms > 0) runs.push(ms);
+        }).catch(function () {});
+      });
+    }
+    return chain.then(function () {
+      if (!runs.length) return 0;
+      runs.sort(function (a, b) { return a - b; });
+      return runs[Math.floor(runs.length / 2)];
+    });
+  }
+
+  // 测速阶段并行打点：下载/上传时各自的「带载延迟」，返回停止函数
+  function probeLatency(base, onValue) {
+    var alive = true;
+    var runs = [];
+    var tick = function () {
+      if (!alive) return;
+      pingOnce(base).then(function (ms) {
+        if (!alive || !isFinite(ms) || ms <= 0) return;
+        runs.push(ms);
+        runs.sort(function (a, b) { return a - b; });
+        onValue(runs[Math.floor(runs.length / 2)]);
+      }).catch(function () {});
+    };
+    var timer = setInterval(tick, 1200);
+    setTimeout(tick, 300);
+    return function () {
+      alive = false;
+      clearInterval(timer);
+    };
+  }
+
   // 只在当前协议的节点里测延迟排序，返回可达节点数
   function rankNodes() {
     var pool = availableNodes();
@@ -1175,14 +1216,6 @@
           if (slot < 0) slot = 0;
           (buckets[slot] || (buckets[slot] = [])).push(ms);
           els.pgPing.textContent = fmtPing(ms);
-          els.pgJitter.textContent = fmtPing(
-            samples.length > 1
-              ? samples.reduce(function (a, b) {
-                  var avg = samples.reduce(function (x, y) { return x + y; }, 0) / samples.length;
-                  return a + Math.abs(b - avg);
-                }, 0) / samples.length
-              : 0
-          );
           setDial(fmtPing(ms), "ms", t("latency"), true);
           await new Promise(function (r) { setTimeout(r, 30); });
         }
@@ -1193,7 +1226,6 @@
       }
     }
     var loss = attempts ? Math.round((fails / attempts) * 100) : 0;
-    els.pgLoss.textContent = loss + "%";
     if (!samples.length) return { ping: 0, jitter: 0, loss: loss, perSec: [] };
     var min = Math.min.apply(null, samples);
     var avg = samples.reduce(function (a, b) { return a + b; }, 0) / samples.length;
@@ -1468,7 +1500,7 @@
     toggleSettings(false);
     clearTimeout(state.jumpTimer);
     state.abort = new AbortController();
-    gaugeMax = s.gaugeMax || 1000;
+    gaugeMax = 1000;
     setRunning(true);
     els.dial.classList.remove("gauge");
     els.arc.style.strokeDashoffset = CIRC;
@@ -1488,12 +1520,18 @@
       var dlMeter = makeMeter(gaugeMax);
       setGauge(0, dlMeter.max());
       setDial("0.00", speedUnit(), "", true);
+      var stopDlLat = probeLatency(state.base, function (ms) {
+        els.pgDownLat.textContent = fmtPing(ms);
+      });
       var dlRun = await measureDownload(state.base, s.downloadSeconds, dlMeter.tick);
-      gaugeMax = dlMeter.max();
+      stopDlLat();
+      // 下载占满连接时排队的小请求要等阶段结束才回来，这里再补测几次
+      var dlLat = await measureLoadedLatency(state.base, 3);
+      if (dlLat) els.pgDownLat.textContent = fmtPing(dlLat);
       dlBytes = dlRun.bytes || 0;
       if (state.abort.signal.aborted) throw new Error("aborted");
       dl = finalSpeed(dlRun.samples) || dl;
-      if (dl > gaugeMax) gaugeMax = niceMax(dl * 1.05);
+      gaugeMax = 1000;
       buildTicks(gaugeMax);
       setGauge(dl, gaugeMax);
       setDial(fmtSpeed(dl), speedUnit(), "", true);
@@ -1502,14 +1540,21 @@
 
       setGauge(0, gaugeMax);
       setDial("0.00", speedUnit(), "", true);
-      // 进入上传阶段：表盘与顶部图标切成上传的紫色
+      // 进入上传阶段：表盘与顶部图标切成上传色
       els.dial.classList.add("up");
+      setStops("gaugeGrad", state.mode === "single" ? UP_GAUGE_COLORS.single : UP_GAUGE_COLORS.multi);
       if (els.mtUpItem) els.mtUpItem.classList.add("live");
       var ulMeter = makeMeter(gaugeMax);
       setGauge(0, ulMeter.max());
       setDial("0.00", speedUnit(), "", true);
+      var stopUlLat = probeLatency(state.base, function (ms) {
+        els.pgUpLat.textContent = fmtPing(ms);
+      });
       var ulRun = await measureUpload(state.base, s.uploadSeconds, ulMeter.tick, dl > 300 ? 4 << 20 : 1 << 20);
-      gaugeMax = ulMeter.max();
+      stopUlLat();
+      var ulLat = await measureLoadedLatency(state.base, 3);
+      if (ulLat) els.pgUpLat.textContent = fmtPing(ulLat);
+      gaugeMax = 1000;
       ulBytes = ulRun.bytes || 0;
       ul = finalSpeed(ulRun.samples) || ul;
       setDial(fmtSpeed(ul), speedUnit(), "", true);
@@ -1518,6 +1563,7 @@
 
       setRunning(false);
       els.dial.classList.remove("up");
+      setStops("gaugeGrad", state.mode === "single" ? GAUGE_COLORS.single : GAUGE_COLORS.multi);
       buildTicks(gaugeMax);
       setGauge(dl, gaugeMax);
       setDial(fmtSpeed(dl), speedUnit(), "", true);
@@ -1534,8 +1580,7 @@
   function showResult(ping, down, up) {
     if (els.speedCard) { els.speedCard.classList.remove("testing"); els.speedCard.classList.add("result"); }
     els.pgPing.textContent = fmtPing(ping.ping);
-    els.pgJitter.textContent = fmtPing(ping.jitter);
-    els.pgLoss.textContent = (ping.loss || 0) + "%";
+    els.pgPing.textContent = fmtPing(ping.ping);
     els.mtDown.textContent = fmtSpeed(down);
     els.mtUp.textContent = fmtSpeed(up);
     renderExp(down, up, ping.ping);

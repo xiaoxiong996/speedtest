@@ -7,6 +7,15 @@
        url("/fonts/montserrat.woff2") format("woff2");
 }
 
+/* 表盘读数专用字体，与 speedtest.net 同款（数字窄、带脚衬线，等宽感） */
+@font-face {
+  font-family: "gauge-mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/gaugemono.woff2") format("woff2");
+}
+
 :root {
   --bg: #000000;
   --fg: #ffffff;
@@ -29,6 +38,9 @@
   --ico-dl: #00c9c0;
   --ico-ul: #b75cf0;
   --ico-ping: #d4ac12;
+  /* 带载延迟：多线程沿用青/紫，单线程换成橙/绿 */
+  --lat-dl: #00c9c0;
+  --lat-ul: #b75cf0;
   --exp-ico: #9aa0a6;
   --exp-dot: rgba(255, 255, 255, 0.5);
   --exp-dot-on: #d5dae2;
@@ -60,6 +72,8 @@
   --ico-dl: #00b3aa;
   --ico-ul: #a84be0;
   --ico-ping: #b89800;
+  --lat-dl: #00b3aa;
+  --lat-ul: #a84be0;
   --exp-ico: #656565;
   --exp-dot: #9193a8;
   --exp-dot-on: #5f6470;
@@ -428,21 +442,23 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .dial.gauge { width: clamp(320px, 32vw, 360px); }
 
-/* 表盘中心大数字：原版 speedtest.net 用 Montserrat Light（细体 300）、大号 */
+/* 表盘中心大数字：原版用 gauge-mono（窄体数字）+ 明显字距 */
 .dial.gauge .dial-value {
   font-size: clamp(32px, 3.3vw, 40px);
   font-weight: 400;
   letter-spacing: 0;
 }
 .dial.gauge .dial-value.num {
-  font-size: clamp(34px, 3.6vw, 42px);
+  font-family: "gauge-mono", "Montserrat", sans-serif;
+  font-size: clamp(32px, 2.6vw, 40px);
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
+  font-variant-numeric: normal;
 }
 /* Kbps 下数字会到六七位，收一点字号；再长的由 trimTicks 把重叠的刻度隐掉 */
-.dial.gauge .dial-value.xlong { font-size: clamp(26px, 2.6vw, 32px); }
-.dial.gauge .dial-value.xxlong { font-size: clamp(22px, 2.2vw, 27px); }
-.dial.gauge .dial-phase { font-size: 10.5px; }
+.dial.gauge .dial-value.xlong { font-size: clamp(24px, 1.9vw, 30px); }
+.dial.gauge .dial-value.xxlong { font-size: clamp(20px, 1.6vw, 25px); }
+.dial.gauge .dial-phase { display: none; }
 .dial.gauge .dial-unit { font-size: 11px; }
 
 .dial-svg {
@@ -529,14 +545,14 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .gauge-track {
   fill: none;
   stroke: var(--gauge-track);
-  stroke-width: 24;
+  stroke-width: 31;
   stroke-linecap: round;
 }
 
 .gauge-arc {
   fill: none;
   stroke: url(#gaugeGrad);
-  stroke-width: 24;
+  stroke-width: 31;
   stroke-linecap: round;
   filter: drop-shadow(0 0 5px rgba(60, 190, 255, 0.3));
   transition: stroke-dashoffset 0.26s linear;
@@ -545,7 +561,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .gauge-ticks text {
   fill: var(--gauge-tick, var(--muted));
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -569,7 +585,16 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .gauge-needle polygon { filter: drop-shadow(0 0 7px rgba(220, 236, 255, 0.3)); }
 
-.dial.gauge .dial-center { padding-top: 15%; }
+/* 指针渐变随主题：深色亮银、浅色深灰 */
+#needleGrad .ng1 { stop-color: #7f8998; stop-opacity: 0.30; }
+#needleGrad .ng2 { stop-color: #c6cfdb; stop-opacity: 0.62; }
+#needleGrad .ng3 { stop-color: #e9f0f8; stop-opacity: 0.92; }
+:root[data-theme="light"] #needleGrad .ng1 { stop-color: #2b3037; stop-opacity: 0.55; }
+:root[data-theme="light"] #needleGrad .ng2 { stop-color: #3d444d; stop-opacity: 0.85; }
+:root[data-theme="light"] #needleGrad .ng3 { stop-color: #1b1f24; stop-opacity: 1; }
+:root[data-theme="light"] .gauge-needle polygon { filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.18)); }
+
+.dial.gauge .dial-center { padding-top: 23%; }
 .dial.gauge .dial-unit {
   display: inline-flex;
   align-items: center;
@@ -598,10 +623,11 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .mt-item { text-align: center; min-width: 104px; }
 
 .mt-num {
+  font-family: "gauge-mono", "Montserrat", sans-serif;
   font-size: clamp(26px, 2.9vw, 34px);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.18;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   color: var(--fg);
 }
 
@@ -671,6 +697,8 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .pico.gold { color: var(--ico-ping); }
 .pico.teal { color: var(--ico-dl); }
 .pico.violet { color: var(--ico-ul); }
+.pico.lat-dl { color: var(--lat-dl); }
+.pico.lat-ul { color: var(--lat-ul); }
 
 /* 结果编号 */
 
@@ -1257,3 +1285,12 @@ body.settings-open .result-bar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* 单线程：环、下载/上传、带载延迟整体换成橙 / 绿 */
+:root[data-conn="single"] {
+  --ico-dl: #ff8a5c;
+  --ico-ul: #7cd828;
+  --lat-dl: #ff8a5c;
+  --lat-ul: #7cd828;
+}
+:root[data-conn="single"] .dial { --ring-glow: rgba(255, 150, 106, 0.5); }

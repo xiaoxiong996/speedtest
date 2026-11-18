@@ -118,19 +118,20 @@
       </svg>
       <b id="pgPing">--</b>
     </span>
-    <span class="ping-val" data-i18n-title="jitterTip" title="抖动">
-      <svg class="pico teal" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <!-- 下载延迟：下载阶段并行测得的延迟，图标是橙红下箭头（与原版一致） -->
+    <span class="ping-val" data-i18n-title="downLatTip" title="下载延迟">
+      <svg class="pico lat-dl" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
         <path d="M12 7.3v9.1M8.8 13.2 12 16.4l3.2-3.2" stroke-width="2"/>
       </svg>
-      <b id="pgJitter">--</b>
+      <b id="pgDownLat">--</b>
     </span>
-    <span class="ping-val" data-i18n-title="lossTip" title="丢包">
-      <svg class="pico violet" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <span class="ping-val" data-i18n-title="upLatTip" title="上传延迟">
+      <svg class="pico lat-ul" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
         <path d="M12 16.7V7.6M8.8 10.8 12 7.6l3.2 3.2" stroke-width="2"/>
       </svg>
-      <b id="pgLoss">--</b>
+      <b id="pgUpLat">--</b>
     </span>
   </div>
 
@@ -199,21 +200,21 @@
       <defs>
         <linearGradient id="gaugeGrad" gradientUnits="userSpaceOnUse" x1="94" y1="306" x2="306" y2="94">
           <stop offset="0%" stop-color="#1f5dff"/>
-          <stop offset="55%" stop-color="#6ae3f8"/>
-          <stop offset="100%" stop-color="#56cdec"/>
+          <stop offset="55%" stop-color="#3f9dfb"/>
+          <stop offset="100%" stop-color="#5dd4f0"/>
         </linearGradient>
       </defs>
-      <path class="gauge-track" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
-      <path class="gauge-arc" id="gaugeArc" d="M93.93 306.07 A150 150 0 1 1 306.07 306.07"/>
+      <path class="gauge-track" d="M96.06 303.94 A147 147 0 1 1 303.94 303.94"/>
+      <path class="gauge-arc" id="gaugeArc" d="M96.06 303.94 A147 147 0 1 1 303.94 303.94"/>
       <g class="gauge-ticks" id="gaugeTicks"></g>
     </svg>
 
     <svg class="needle-svg" viewBox="0 0 400 400" aria-hidden="true">
       <defs>
         <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="203" x2="200" y2="122">
-          <stop offset="0%" stop-color="#7d8794" stop-opacity="0.28"/>
-          <stop offset="60%" stop-color="#aab4c1" stop-opacity="0.55"/>
-          <stop offset="100%" stop-color="#eef3f9" stop-opacity="0.88"/>
+          <stop class="ng1" offset="0%" stop-color="#7f8998" stop-opacity="0.30"/>
+          <stop class="ng2" offset="58%" stop-color="#c6cfdb" stop-opacity="0.62"/>
+          <stop class="ng3" offset="100%" stop-color="#e9f0f8" stop-opacity="0.92"/>
         </linearGradient>
       </defs>
       <g class="gauge-needle" id="gaugeNeedle">
@@ -326,6 +327,15 @@
         <div class="sp-line sp-ip" id="spIp">--</div>
         <div class="sp-line" id="spLoc">--</div>
         <div class="sp-line" id="spGeo">--</div>
+        <!-- 协议：IPv4 / IPv6（后台配了 IPv6 节点才会出现） -->
+        <div class="sp-row" id="protoBlock" hidden>
+          <span class="sp-key" data-i18n="protocol">协议</span>
+          <div class="sp-opts proto-row">
+            <button class="proto-opt active" data-family="v4" type="button">IPv4</button>
+            <button class="proto-opt" data-family="v6" type="button">IPv6</button>
+          </div>
+        </div>
+
       </section>
 
       <section class="sp-col">
@@ -335,15 +345,6 @@
         <div class="sp-line" id="spNodeProto"></div>
         <button class="sp-btn" id="spChangeNode" type="button" data-i18n="selectServer">选择测速节点</button>
       </section>
-    </div>
-  </div>
-
-  <!-- 协议：IPv4 / IPv6（后台配了 IPv6 节点才会出现） -->
-  <div class="mode-block proto-block" id="protoBlock" hidden>
-    <div class="mode-label" data-i18n="protocol">协议</div>
-    <div class="mode-row proto-row">
-      <button class="proto-opt active" data-family="v4" type="button">IPv4</button>
-      <button class="proto-opt" data-family="v6" type="button">IPv6</button>
     </div>
   </div>
 

@@ -29,6 +29,8 @@
       latency: "延迟",
       pingTip: "延迟",
       jitterTip: "抖动",
+      downLatTip: "下载延迟",
+      upLatTip: "上传延迟",
       lossTip: "丢包",
 
       /* 结果条 */
@@ -156,6 +158,8 @@
       latency: "Latency",
       pingTip: "Ping",
       jitterTip: "Jitter",
+      downLatTip: "Download latency",
+      upLatTip: "Upload latency",
       lossTip: "Packet loss",
 
       resultId: "Result ID",
