@@ -31,6 +31,8 @@ data/                                                                      运�
 
 这套代码已配好 GitHub Actions：推 `main` 或打 `v*` 标签，自动构建**多架构镜像**（`linux/amd64` + `linux/arm64`）并推到你自己的 ghcr.io，同时自动创建 Release：
 
+> 当前线上仓库：<https://github.com/xiaoxiong996/speedtest>（下面的 `<用户名>/<仓库>` 可整体替换成 `xiaoxiong996/speedtest`）
+
 | 用途 | 镜像 |
 |---|---|
 | 主控（网页 + 后台 + 报告） | `ghcr.io/<用户名>/<仓库名>:latest`（打 tag 时另有 `:1.4.0`） |
