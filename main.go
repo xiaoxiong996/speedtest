@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.4.1"
+const appVersion = "1.4.2"
 
 var errNodeNotFound = errors.New("node not found")
 

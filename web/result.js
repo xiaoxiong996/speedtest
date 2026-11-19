@@ -321,26 +321,53 @@
     return String(Math.round(v * 100) / 100);
   }
 
-  // 用二次贝塞尔平滑折线：控制点落在数据点上，不会像三次曲线那样冲高或跌到负值
-  function tlPath(list) {
-    if (!list.length) return "";
-    if (list.length === 1) return "M" + list[0].x.toFixed(1) + " " + list[0].y.toFixed(1);
-    var d = "M" + list[0].x.toFixed(1) + " " + list[0].y.toFixed(1);
-    for (var i = 1; i < list.length; i++) {
-      var prev = list[i - 1], cur = list[i];
-      d += " Q" + cur.x.toFixed(1) + " " + cur.y.toFixed(1) + " " +
-        ((prev.x + cur.x) / 2).toFixed(1) + " " + ((prev.y + cur.y) / 2).toFixed(1);
+  // 3 点加权平滑（1-2-1），压掉逐秒毛刺；首尾保持原值，不被带动
+  function tlSmooth(list, passes) {
+    var a = list;
+    for (var k = 0; k < (passes || 0); k++) {
+      if (a.length < 3) break;
+      var b = a.slice();
+      for (var i = 1; i < a.length - 1; i++) {
+        b[i] = { x: a[i].x, y: (a[i - 1].y + 2 * a[i].y + a[i + 1].y) / 4 };
+      }
+      a = b;
     }
-    var last = list[list.length - 1];
-    d += " L" + last.x.toFixed(1) + " " + last.y.toFixed(1);
+    return a;
+  }
+
+  // Catmull-Rom 转三次贝塞尔：曲线严格经过每个点、切线连续，
+  // 比「二次贝塞尔只过中点」连贯得多；控制点纵坐标钳在绘图区内，
+  // 慢启动的陡升段不会拱出顶边
+  function tlCurve(list) {
+    if (!list.length) return "";
+    var top = TL_T, bot = TL_H - TL_B;
+    function cy(v) { return Math.max(top, Math.min(bot, v)); }
+    var d = "M" + list[0].x.toFixed(1) + " " + list[0].y.toFixed(1);
+    for (var i = 0; i < list.length - 1; i++) {
+      var p0 = list[i - 1] || list[i], p1 = list[i];
+      var p2 = list[i + 1], p3 = list[i + 2] || list[i + 1];
+      var c1x = p1.x + (p2.x - p0.x) / 6;
+      var c1y = cy(p1.y + (p2.y - p0.y) / 6);
+      var c2x = p2.x - (p3.x - p1.x) / 6;
+      var c2y = cy(p2.y - (p3.y - p1.y) / 6);
+      d += " C" + c1x.toFixed(1) + " " + c1y.toFixed(1) + " " +
+        c2x.toFixed(1) + " " + c2y.toFixed(1) + " " +
+        p2.x.toFixed(1) + " " + p2.y.toFixed(1);
+    }
     return d;
   }
 
-  function tlArea(list, base) {
+  // 先平滑再插值：passes 越大越文静，1 已能压掉大部分毛刺
+  function tlPath(list, passes) {
+    return tlCurve(tlSmooth(list, passes));
+  }
+
+  function tlArea(list, base, passes) {
     if (list.length < 2) return "";
-    return tlPath(list) +
-      " L" + list[list.length - 1].x.toFixed(1) + " " + base +
-      " L" + list[0].x.toFixed(1) + " " + base + " Z";
+    var sm = tlSmooth(list, passes);
+    return tlCurve(sm) +
+      " L" + sm[sm.length - 1].x.toFixed(1) + " " + base +
+      " L" + sm[0].x.toFixed(1) + " " + base + " Z";
   }
 
   function tlSpeedText(v) {
@@ -422,6 +449,22 @@
     var sD = dRaw.map(function (p) { return { x: px(p.t - dBase), y: py(p.d) }; });
     var sU = uRaw.map(function (p) { return { x: px(p.t - uBase), y: py(p.u) }; });
 
+    // 曲线实际经过的是平滑后的点，顺手把像素 y 按秒记下来，
+    // 拖动时的圆点才能贴在曲线上（浮层里的数值仍是原始测量值）
+    var cD = tlSmooth(sD, 2), cU = tlSmooth(sU, 1);
+    function yMap(list) {
+      var m = {};
+      for (var i = 0; i < list.length; i++) {
+        m[Math.round(((list[i].x - x0) / (x1 - x0)) * total)] = list[i].y;
+      }
+      return m;
+    }
+    var yD = yMap(cD), yU = yMap(cU);
+    merged.forEach(function (p) {
+      if (yD[p.s] != null) p.dy = yD[p.s];
+      if (yU[p.s] != null) p.uy = yU[p.s];
+    });
+
     var out = [];
     out.push('<svg viewBox="0 0 ' + TL_W + " " + TL_H + '" role="img" aria-label="' + t("tlTitle") + '">');
     out.push("<defs>");
@@ -457,10 +500,10 @@
         '" text-anchor="middle">' + s + "s</text>");
     });
 
-    out.push('<path d="' + tlArea(sU, y1) + '" fill="url(#tlFillU)"/>');
-    out.push('<path d="' + tlArea(sD, y1) + '" fill="url(#tlFillD)"/>');
-    out.push('<path class="tl-line u" d="' + tlPath(sU) + '"/>');
-    out.push('<path class="tl-line d" d="' + tlPath(sD) + '"/>');
+    out.push('<path d="' + tlArea(sU, y1, 1) + '" fill="url(#tlFillU)"/>');
+    out.push('<path d="' + tlArea(sD, y1, 2) + '" fill="url(#tlFillD)"/>');
+    out.push('<path class="tl-line u" d="' + tlPath(sU, 1) + '"/>');
+    out.push('<path class="tl-line d" d="' + tlPath(sD, 2) + '"/>');
 
     // 拖动用的十字线与两个取值点
     out.push('<g id="tlCursor" hidden>');
@@ -518,8 +561,8 @@
       cross.hidden = false;
       cross.setAttribute("x1", bx.toFixed(1));
       cross.setAttribute("x2", bx.toFixed(1));
-      mark(dots.d, best, best.hd, c.py(best.d));
-      mark(dots.u, best, best.hu, c.py(best.u));
+      mark(dots.d, best, best.hd, best.dy != null ? best.dy : c.py(best.d));
+      mark(dots.u, best, best.hu, best.uy != null ? best.uy : c.py(best.u));
       cursor.hidden = false;
 
       var rows = [

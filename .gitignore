@@ -13,3 +13,5 @@ data/
 .DS_Store
 *.swp
 __pycache__/
+# 本地方案对比页（不进仓库）
+preview/

@@ -98,13 +98,13 @@ git commit -m "speedtest: controller + node"
 git remote add origin https://github.com/<用户名>/<仓库名>.git
 git branch -M main
 git push -u origin main
-git tag v1.4.1 && git push origin v1.4.1     # 触发 Actions 构建镜像
+git tag v1.4.2 && git push origin v1.4.2     # 触发 Actions 构建镜像
 ```
 
 产物：
 
 ```
-ghcr.io/<用户名>/<仓库名>-node:1.4.1
+ghcr.io/<用户名>/<仓库名>-node:1.4.2
 ghcr.io/<用户名>/<仓库名>:latest
 ```
 

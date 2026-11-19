@@ -35,7 +35,7 @@ data/                                                                      运�
 
 | 用途 | 镜像 |
 |---|---|
-| 主控（网页 + 后台 + 报告） | `ghcr.io/<用户名>/<仓库名>:latest`（打 tag 时另有 `:1.4.1`） |
+| 主控（网页 + 后台 + 报告） | `ghcr.io/<用户名>/<仓库名>:latest`（打 tag 时另有 `:1.4.2`） |
 | 测速节点 | `ghcr.io/<用户名>/<仓库名>-node:latest` |
 
 两者二进制完全相同，只是镜像名分开，Compose 里各写各的，避免拉错。
@@ -52,12 +52,12 @@ git remote add origin https://github.com/你的用户名/你的仓库名.git
 git push -u origin main
 
 # 2. 打标签：触发多架构构建 + 创建 Release
-git tag v1.4.1 && git push origin v1.4.1
+git tag v1.4.2 && git push origin v1.4.2
 ```
 
 - 仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则推 ghcr.io 会没权限。
 - 镜像是**私有包**时，服务器上先 `docker login ghcr.io -u 用户名`（密码用 GitHub 的 Personal Access Token，需 `read:packages` 权限）；公开仓库可跳过。
-- 不想用 Actions 也可以本地构建：`docker build -t speedtest-site:1.4.1 .`
+- 不想用 Actions 也可以本地构建：`docker build -t speedtest-site:1.4.2 .`
 
 ### 主控版 vs 节点版
 
@@ -70,7 +70,7 @@ git tag v1.4.1 && git push origin v1.4.1
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/install.sh \
-  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>:1.4.1 --url https://speed.example.com
+  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>:1.4.2 --url https://speed.example.com
 
 # 卸载（默认保留 data/，加 --purge-data 才删配置与报告历史）
 curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/uninstall.sh \
@@ -90,7 +90,7 @@ sudo bash install.sh
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/install-node.sh \
-  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>-node:1.4.1 --port 8443 \
+  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>-node:1.4.2 --port 8443 \
       --prefix /n1 --domain node.example.com --host node.example.com --origin https://speed.example.com
 
 # 卸载
@@ -103,9 +103,9 @@ curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/un
 ```bash
 # 主控版
 mkdir -p /app/speed && cd /app/speed
-IMAGE=ghcr.io/你的用户名/你的仓库名:1.4.1 docker compose up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名:1.4.2 docker compose up -d
 # 节点版
-IMAGE=ghcr.io/你的用户名/你的仓库名-node:1.4.1 docker compose -f docker-compose.node.yml up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名-node:1.4.2 docker compose -f docker-compose.node.yml up -d
 ```
 
 本地无镜像时 `docker compose up -d` 会自动从 ghcr.io 拉取；`--build` 则用源码现构建。
@@ -203,10 +203,10 @@ cd speedtest
 git init && git add -A && git commit -m "speedtest: controller + node"
 git remote add origin https://github.com/<你的用户名>/<仓库名>.git
 git branch -M main && git push -u origin main
-git tag v1.4.1 && git push origin v1.4.1       # 触发 Actions 构建镜像
+git tag v1.4.2 && git push origin v1.4.2       # 触发 Actions 构建镜像
 ```
 
-Actions 完成后镜像地址是 `ghcr.io/<你的用户名>/<仓库名>-node:1.4.1`（主控镜像是同名去掉 `-node`，`latest` 同步更新）。
+Actions 完成后镜像地址是 `ghcr.io/<你的用户名>/<仓库名>-node:1.4.2`（主控镜像是同名去掉 `-node`，`latest` 同步更新）。
 GHCR 默认私有：到 GitHub → Your packages → 该包 → Package settings 把可见性改成 **Public**，
 否则节点服务器要先 `docker login ghcr.io` 才能拉。
 
@@ -215,7 +215,7 @@ GHCR 默认私有：到 GitHub → Your packages → 该包 → Package settings
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<你的用户名>/<仓库名>/main/deploy/install-node.sh \
   | sudo bash -s -- \
-      --image ghcr.io/<你的用户名>/<仓库名>-node:1.4.1 \
+      --image ghcr.io/<你的用户名>/<仓库名>-node:1.4.2 \
       --port 8443 \
       --prefix /n1 \
       --host node.example.com \
