@@ -301,6 +301,8 @@
 
   var TL_W = 640, TL_H = 208;
   var TL_L = 44, TL_R = 16, TL_T = 22, TL_B = 26;
+  // 平滑轮数：0=不过滤（最贴原始抖动），1 已能压掉逐秒毛刺，加到 2-3 会明显变文静
+  var TL_SMOOTH_D = 1, TL_SMOOTH_U = 1;
   var tlChart = null;
 
   // 轴上限取一个好看的整数档位，曲线顶部不会贴着边框
@@ -451,7 +453,7 @@
 
     // 曲线实际经过的是平滑后的点，顺手把像素 y 按秒记下来，
     // 拖动时的圆点才能贴在曲线上（浮层里的数值仍是原始测量值）
-    var cD = tlSmooth(sD, 2), cU = tlSmooth(sU, 1);
+    var cD = tlSmooth(sD, TL_SMOOTH_D), cU = tlSmooth(sU, TL_SMOOTH_U);
     function yMap(list) {
       var m = {};
       for (var i = 0; i < list.length; i++) {
@@ -500,10 +502,10 @@
         '" text-anchor="middle">' + s + "s</text>");
     });
 
-    out.push('<path d="' + tlArea(sU, y1, 1) + '" fill="url(#tlFillU)"/>');
-    out.push('<path d="' + tlArea(sD, y1, 2) + '" fill="url(#tlFillD)"/>');
-    out.push('<path class="tl-line u" d="' + tlPath(sU, 1) + '"/>');
-    out.push('<path class="tl-line d" d="' + tlPath(sD, 2) + '"/>');
+    out.push('<path d="' + tlArea(sU, y1, TL_SMOOTH_U) + '" fill="url(#tlFillU)"/>');
+    out.push('<path d="' + tlArea(sD, y1, TL_SMOOTH_D) + '" fill="url(#tlFillD)"/>');
+    out.push('<path class="tl-line u" d="' + tlPath(sU, TL_SMOOTH_U) + '"/>');
+    out.push('<path class="tl-line d" d="' + tlPath(sD, TL_SMOOTH_D) + '"/>');
 
     // 拖动用的十字线与两个取值点
     out.push('<g id="tlCursor" hidden>');

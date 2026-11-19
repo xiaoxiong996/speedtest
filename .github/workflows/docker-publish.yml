@@ -1,6 +1,6 @@
 name: 构建并推送镜像（多架构 / 主控 + 节点）
 
-# 触发：推 tag（v1.4.2）、推 main（构建 latest）、或手动触发。
+# 触发：推 tag（v1.4.3）、推 main（构建 latest）、或手动触发。
 # 一次运行会产出两个仓库：
 #   ghcr.io/<owner>/<repo>       ← 主控版（APP_MODE=controller）
 #   ghcr.io/<owner>/<repo>-node  ← 节点版（APP_MODE=node）
