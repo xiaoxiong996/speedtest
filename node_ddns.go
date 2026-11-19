@@ -30,7 +30,7 @@ import (
 
 // ddnsEntry 一条 DDNS 规则：哪个域名、哪种记录。
 type ddnsEntry struct {
-	Domain string `json:"domain"` // 例如 speeda.example.com
+	Domain string `json:"domain"` // 例如 node-a.example.com
 	Type   string `json:"type"`   // A 或 AAAA
 	// 运行期状态（只读，由 check 填）
 	CurrentIP string `json:"currentIp,omitempty"` // 本机公网 IP

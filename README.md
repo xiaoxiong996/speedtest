@@ -344,7 +344,7 @@ IPv6 地址较长，按「前 4 段 / 后 4 段」折成两行显示：
 
 ```
 2001:db8:4a2f:1100:
-d923:7900:709a:8f54
+7c3e:2b91:6f0d:8a54
 ```
 
 实现见 `app.js` / `result.js` 的 `ipLines()` + `.cb-sub { white-space: pre-line }`。

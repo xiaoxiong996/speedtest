@@ -5,10 +5,10 @@ package main
 // 目录结构（NODE_CERT_DIR，默认 /certs）：
 //
 //	certs/
-//	  ├─ speeda.example.com/
+//	  ├─ node-a.example.com/
 //	  │    ├─ cert.pem
 //	  │    └─ key.pem
-//	  ├─ speedb.example.com/
+//	  ├─ node-b.example.com/
 //	  │    ├─ cert.pem
 //	  │    └─ key.pem
 //	  └─ cert.pem / key.pem      ← 旧版单证书结构，仍兼容（当作一张）
