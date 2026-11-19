@@ -1,6 +1,6 @@
 name: 构建并推送镜像（多架构 / 主控 + 节点）
 
-# 触发：推 tag（v1.4.3）、推 main（构建 latest）、或手动触发。
+# 触发：推 tag（v1.4.4）、推 main（构建 latest）、或手动触发。
 # 一次运行会产出两个仓库：
 #   ghcr.io/<owner>/<repo>       ← 主控版（APP_MODE=controller）
 #   ghcr.io/<owner>/<repo>-node  ← 节点版（APP_MODE=node）
@@ -19,6 +19,26 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # 依赖与标准库漏洞扫描：每次推代码都查一遍，不用再靠人工隔几个月扫一次
+  scan:
+    name: 漏洞扫描（govulncheck）
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.11"
+
+      - name: 运行 govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
   build-and-push:
     runs-on: ubuntu-latest
     permissions:

@@ -13,7 +13,7 @@
 # ============================================================================
 services:
   speedtest-node:
-    image: "${IMAGE:-speedtest-node:1.4.3}"
+    image: "${IMAGE:-speedtest-node:1.4.4}"
     container_name: speedtest-node
     restart: unless-stopped
 

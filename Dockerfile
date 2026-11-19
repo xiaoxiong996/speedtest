@@ -1,5 +1,8 @@
 # ---- 构建阶段（支持 amd64 / arm64，构建时按目标平台自动选择）----
-FROM golang:1.26-alpine AS build
+# 版本写死到小版本：Go 的 1.26.11 修了 CVE-2026-97033~97043（cgo 构建期 RCE）
+# 与 CVE-2026-97054（net/http 的 MaxBytesReader 并发写头崩溃，本项目上传/面板都用到了）。
+# 用 golang:1.26-alpine 这种浮动 tag 会随上游悄悄变化，出问题时无法复现，也不利于审计。
+FROM golang:1.26.11-alpine AS build
 WORKDIR /src
 # TARGETARCH 由 Buildx 注入；普通 docker build 时默认 amd64
 ARG TARGETARCH=amd64
@@ -13,9 +16,15 @@ COPY web ./web
 RUN go build -trimpath -ldflags "-s -w" -o /out/speedtest .
 
 # ---- 运行阶段 ----
-FROM alpine:3.20
+# Alpine 3.20 已于 2026-04-01 结束支持（EOL），不再接收安全更新：
+# 镜像里的 musl 1.2.5-r3 就缺 CVE-2026-107891（regcomp 整数溢出，CVSS 8.1）的补丁。
+# 3.24 是当前受支持的最新稳定分支（支持到 2028-06），musl 已是 1.2.6-r3（含修复）。
+FROM alpine:3.24
 # ca-certificates：ACME 访问 Let's Encrypt 时要校验对端证书；tzdata：日志/报告时区
-RUN apk add --no-cache ca-certificates tzdata \
+# 先 apk upgrade：基础镜像发布时冻结的包（如 zlib 1.3.2-r1）会落后于仓库，
+# 不升级就会带着已修复的 CVE 一直跑，构建时顺手补齐
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates tzdata \
     && adduser -D -H -u 10001 app \
     && mkdir -p /data /certs \
     && chown -R app:app /data /certs
