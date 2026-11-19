@@ -328,6 +328,12 @@ func (c *nodeConfig) nodeGuard(next http.Handler) http.Handler {
 			}
 		}
 		if r.Method == http.MethodOptions {
+			// 预检响应必须带 Access-Control-Allow-Origin，否则浏览器会直接丢掉这条
+			// 跨域 POST。上面那段回显 Origin 的逻辑只在「配了 NODE_ALLOW_ORIGINS」
+			// 时生效；没配白名单的新节点要靠 setCORS 补默认的 *。
+			// 漏掉这一步的表现非常典型：下载正常（GET 是简单请求，不预检），
+			// 上传永远是 0（application/octet-stream 必预检，预检没过就没发包）。
+			setCORS(w)
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			h.Set("Access-Control-Allow-Headers", "Content-Type, Range")
 			h.Set("Access-Control-Max-Age", "86400")

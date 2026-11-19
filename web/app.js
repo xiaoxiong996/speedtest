@@ -1506,6 +1506,9 @@
     var lastTotal = 0;
     var samples = [{ t: 0, bytes: 0 }];
     var stopped = false;
+    // 失败计数：非 2xx 或网络错误。用于在「一个字节都没传上去」时给出提示，
+    // 否则用户只看到表盘恒为 0，完全不知道是 413 / 403 / CORS 哪一类问题。
+    var fails = 0, lastStatus = 0;
 
     function loop(i) {
       if (stopped || performance.now() >= deadline) return Promise.resolve();
@@ -1520,9 +1523,10 @@
         xhr.upload.onprogress = function (e) { live[i] = e.loaded; };
         xhr.onload = function () {
           if (xhr.status >= 200 && xhr.status < 300) per[i] += payload.size;
+          else { fails++; lastStatus = xhr.status; }
         };
         xhr.onloadend = function () { live[i] = 0; resolve(); };
-        xhr.onerror = function () { live[i] = 0; resolve(); };
+        xhr.onerror = function () { live[i] = 0; fails++; lastStatus = lastStatus || -1; resolve(); };
         xhr.send(payload);
       }).then(function () {
         return new Promise(function (r) { setTimeout(r, 0); });
@@ -1560,7 +1564,7 @@
           // 上传总量 = 各连接已发出的字节之和，报告里要展示实际消耗的流量
           var sent = 0;
           for (var i = 0; i < per.length; i++) sent += per[i] + (live[i] || 0);
-          resolve({ samples: samples, bytes: Math.max(sent, lastTotal) });
+          resolve({ samples: samples, bytes: Math.max(sent, lastTotal), fails: fails, status: lastStatus });
         }, 300);
       });
     });
@@ -1711,6 +1715,14 @@
       // 上传同样实时推进（55% → 92%）
       rampProgress(92, (s.uploadSeconds || 15) * 1000);
       var ulRun = await measureUpload(state.base, s.uploadSeconds, ulMeter.tick, dl > 300 ? 4 << 20 : 1 << 20);
+      // 一个字节都没成功上传：把原因说出来，别让用户盯着 0.00 猜
+      if (!(ulRun.bytes > 0) && ulRun.fails > 0) {
+        toast(
+          "上行测速失败：" +
+            (ulRun.status > 0 ? "节点返回 " + ulRun.status : "请求被中断") +
+            "（检查节点反代的上传大小限制，如 Nginx client_max_body_size）"
+        );
+      }
       stopUlLat();
       var ulLat = await measureLoadedLatency(state.base, 3);
       if (ulLat) els.pgUpLat.textContent = fmtPing(ulLat);

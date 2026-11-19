@@ -14,8 +14,8 @@
 # ============================================================================
 services:
   speedtest:
-    # 镜像名：本地构建时用 1.4.0；从 GitHub 拉镜像部署时改 IMAGE=ghcr.io/用户名/仓库名:latest
-    image: "${IMAGE:-speedtest-site:1.4.0}"
+    # 镜像名：本地构建时用 1.4.1；从 GitHub 拉镜像部署时改 IMAGE=ghcr.io/用户名/仓库名:latest
+    image: "${IMAGE:-speedtest-site:1.4.1}"
     build:
       context: .
     container_name: speedtest
