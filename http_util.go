@@ -35,48 +35,118 @@ func (s *Server) signSession(user string, ttl time.Duration) string {
 	return body + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func (s *Server) verifySession(token string) bool {
+// sessionDuration 是登录有效期。后台是低频操作的工具站，
+// 12 小时太短（第二天刷新就掉登录），这里放宽到 30 天并做滑动续期。
+const sessionDuration = 30 * 24 * time.Hour
+
+// sessionRenewBefore：剩余有效期少于这个值就顺手换一张新票据（滑动续期），
+// 只要还在用就不会掉登录。
+const sessionRenewBefore = 7 * 24 * time.Hour
+
+func (s *Server) verifySession(token string) (sessionPayload, bool) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
-		return false
+		return sessionPayload{}, false
 	}
 	mac := hmac.New(sha256.New, []byte(s.store.Get().Secret))
 	mac.Write([]byte(parts[0]))
 	want := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(want), []byte(parts[1])) != 1 {
-		return false
+		return sessionPayload{}, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return false
+		return sessionPayload{}, false
 	}
 	var p sessionPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return false
+		return sessionPayload{}, false
 	}
 	cfg := s.store.Get()
 	if p.Exp < time.Now().Unix() {
-		return false
+		return sessionPayload{}, false
 	}
 	if p.V != cfg.Admin.SessionVersion {
-		return false
+		return sessionPayload{}, false
 	}
-	return p.User == cfg.Admin.Username
+	if p.User != cfg.Admin.Username {
+		return sessionPayload{}, false
+	}
+	return p, true
+}
+
+// firstValidSession 在同名 Cookie 有多份时，返回第一份「验签通过」的。
+//
+// 为什么需要：浏览器可能同时带着「宿主级」和「Domain=父域」两份 speedtest_session
+// （改过域名作用域、或从不同子域登录过），Cookie 头的先后顺序由浏览器决定。
+// 只取 r.Cookie() 拿到的那一份，就可能时而正常、时而 401 —— 表现就是刷新掉登录。
+func (s *Server) firstValidSession(r *http.Request) (sessionPayload, bool) {
+	for _, c := range r.Cookies() {
+		if c.Name != sessionCookieName || c.Value == "" {
+			continue
+		}
+		if p, ok := s.verifySession(c.Value); ok {
+			return p, true
+		}
+	}
+	return sessionPayload{}, false
 }
 
 func (s *Server) isAuthed(r *http.Request) bool {
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil || c.Value == "" {
-		return false
+	_, ok := s.firstValidSession(r)
+	return ok
+}
+
+// adminCookieDomain 返回后台会话 Cookie 的作用域：
+//   · ADMIN_COOKIE_DOMAIN 显式配置时用它（例如 .example.com，让 speed.example.com 与
+//     speedtest.example.com 共用同一份登录态）
+//   · 没配就是空 → 宿主级 Cookie，只在签发它的那个域名下有效
+//
+// 为什么需要它：站点可能同时有多个子域名指向同一份后台（历史域名、加速域名），
+// 宿主级 Cookie 换个子域名就「刷新变未登录」，表现很像会话失效。
+func adminCookieDomain() string {
+	d := strings.TrimSpace(os.Getenv("ADMIN_COOKIE_DOMAIN"))
+	if d == "" {
+		return ""
 	}
-	return s.verifySession(c.Value)
+	if !strings.HasPrefix(d, ".") {
+		d = "." + d
+	}
+	return d
+}
+
+// setSessionCookie 统一登录/续期的 Cookie 属性，避免两处写法不一致。
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Domain:   adminCookieDomain(),
+		HttpOnly: true,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionDuration / time.Second),
+	})
 }
 
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAuthed(r) {
+		p, ok := s.firstValidSession(r)
+		if !ok {
+			n := 0
+			for _, c := range r.Cookies() {
+				if c.Name == sessionCookieName {
+					n++
+				}
+			}
+			// 排障用：Host + 同名 Cookie 份数，能直接看出是不是换域名/多份 Cookie 打架
+			log.Printf("[auth] 401 host=%s cookies=%d ip=%s", r.Host, n, clientIP(r))
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "登录已失效，请重新登录"})
 			return
+		}
+		// 滑动续期：快到期就换新票据，一路用下去不会突然掉登录
+		if time.Until(time.Unix(p.Exp, 0)) < sessionRenewBefore {
+			s.setSessionCookie(w, r, s.signSession(p.User, sessionDuration))
 		}
 		next(w, r)
 	}
@@ -228,33 +298,85 @@ func readJSON(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-// 只有连接来源是 TRUSTED_PROXIES 里的可信代理时，才采信 TRUSTED_IP_HEADERS
-// 指定的头（默认只有 X-Real-IP，要求反代覆盖写入，不能透传访客自填的值）；
-// 直连场景一律以 RemoteAddr 为准，避免任何人伪造头绕过登录限流或报告归属校验。
+// 访客地址解析：先看连接来源，再按可信头取值。
+//   - 来源是公网且不在 TRUSTED_PROXIES：说明是真直连，一律以 RemoteAddr 为准，
+//     防止任何人自填头伪造地址（会把登录限流、报告归属一起绕过）。
+//   - 来源在 TRUSTED_PROXIES（含内置 CDN 回源段）：按头优先级取真实访客地址。
+//   - 来源是回环 / 私网但没配进 TRUSTED_PROXIES：说明前面确实有反代（nginx、
+//     Docker 网关、Lucky 换网段等），退一步采信头里的公网地址，避免把访客
+//     地址显示成空白。
 func clientIP(r *http.Request) string {
 	remote := normalizeIP(r.RemoteAddr)
-	if remote == "" || !isTrustedProxy(remote) {
-		if isPublicIP(remote) {
-			return remote
+	if remote != "" && isTrustedProxy(remote) {
+		if ip := headerClientIP(r); ip != "" {
+			return ip
 		}
-		return ""
+		return remote
 	}
+	if isPublicIP(remote) {
+		return remote
+	}
+	// 回环 / 私网来源：反代就在前面，头里带的是访客地址
+	if ip := headerClientIP(r); ip != "" {
+		return ip
+	}
+	return ""
+}
+
+// headerClientIP 按 TRUSTED_IP_HEADERS 的顺序取访客地址。
+// 默认顺序覆盖 Cloudflare、阿里云 CDN、腾讯云 EdgeOne、通用 X-Real-IP，
+// X-Forwarded-For 放最后兜底（解析方式不同，单独处理）。
+func headerClientIP(r *http.Request) string {
 	for _, h := range trustedIPHeaders() {
 		if strings.EqualFold(h, "X-Forwarded-For") {
-			// 走代理链时取最靠近代理的公网地址；客户端自己塞在前面的值不算。
-			cands := clientIPChain(r)
-			for i := len(cands) - 1; i >= 0; i-- {
-				if isPublicIP(cands[i]) {
-					return cands[i]
-				}
+			if ip := pickFromXFF(r); ip != "" {
+				return ip
 			}
 			continue
 		}
-		if ip := normalizeIP(r.Header.Get(h)); ip != "" && isPublicIP(ip) {
+		for _, raw := range headerValues(r, h) {
+			if ip := normalizeIP(raw); ip != "" && isPublicIP(ip) {
+				return ip
+			}
+		}
+	}
+	return ""
+}
+
+// headerValues 取某个头的全部值：同名多行 + 逗号分隔（部分 CDN 会把多个
+// 地址塞进同一个头里）都拆开，按出现顺序返回。
+func headerValues(r *http.Request, name string) []string {
+	var out []string
+	for _, v := range r.Header.Values(name) {
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
+}
+
+// pickFromXFF 从 X-Forwarded-For 里挑出真实访客地址。
+// 代理是「每跳往右追加」的，所以从右往左走：跳过可信代理（CF / 阿里 / 腾讯
+// 的边缘节点、本机反代）和私有地址，第一个既公网又不可信的地址就是访客；
+// 整条链都不可信时再退回最左边那个公网地址。
+func pickFromXFF(r *http.Request) string {
+	cands := clientIPChain(r) // 左 → 右，末尾是 RemoteAddr
+	// 最左是原始客户端：CDN 回源时会用它自己看到的地址重写这一行，
+	// 后面追加的都是中间代理，所以先取最左边那个公网地址。
+	for _, ip := range cands {
+		if isPublicIP(ip) && !isTrustedProxy(ip) {
 			return ip
 		}
 	}
-	return remote
+	// 整条链都在可信段里：退一步从右往左取第一个公网地址
+	for i := len(cands) - 1; i >= 0; i-- {
+		if isPublicIP(cands[i]) {
+			return cands[i]
+		}
+	}
+	return ""
 }
 
 var (
@@ -282,27 +404,49 @@ func trustedIPHeaders() []string {
 	return trustedIPHeaderNames
 }
 
+// defaultIPHeaders 是各家 CDN 用来传访客真实地址的头，按可信度排序：
+// Cloudflare / 阿里云 CDN / 腾讯云 EdgeOne / 通用反代，X-Forwarded-For 兜底。
+const defaultIPHeaders = "CF-Connecting-IP,True-Client-IP,Ali-Cdn-Real-Ip,Ali-Real-Ip,EO-Connecting-IP,X-Forwarded-For,X-Real-IP"
+
+// cloudflareNets 是 Cloudflare 官方回源网段（cloudflare.com/ips）。
+// 站点挂在 CF 后面、回源直连源站（不经本机反代）时，RemoteAddr 会是这些段里
+// 的边缘地址；只有把它们算作可信代理，才敢采信 CF-Connecting-IP。
+// 换用别的 CDN 时，CDN 边缘地址段通过 TRUSTED_PROXIES 补充即可。
+var cloudflareNets = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+	"141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+	"197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+	"172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+	"2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+}
+
 func parseTrustedProxies() {
 	trustedProxyOnce.Do(func() {
-		trustedIPHeaderNames = splitListEnv("TRUSTED_IP_HEADERS", "X-Real-IP")
-		for _, raw := range strings.Split(os.Getenv("TRUSTED_PROXIES"), ",") {
-			raw = strings.TrimSpace(raw)
-			if raw == "" {
+		trustedIPHeaderNames = splitListEnv("TRUSTED_IP_HEADERS", defaultIPHeaders)
+		raw := os.Getenv("TRUSTED_PROXIES")
+		// 内置的 CDN 回源段默认启用（可 TRUST_CDN_PRESETS=off 关闭）
+		if !strings.EqualFold(strings.TrimSpace(os.Getenv("TRUST_CDN_PRESETS")), "off") {
+			raw = raw + "," + strings.Join(cloudflareNets, ",")
+		}
+		for _, item := range strings.Split(raw, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
 				continue
 			}
-			if !strings.Contains(raw, "/") {
-				if ip := net.ParseIP(raw); ip != nil {
+			if !strings.Contains(item, "/") {
+				if ip := net.ParseIP(item); ip != nil {
 					bits := 128
 					if ip.To4() != nil {
 						bits = 32
 					}
-					raw += "/" + strconv.Itoa(bits)
+					item += "/" + strconv.Itoa(bits)
 				}
 			}
-			if _, n, err := net.ParseCIDR(raw); err == nil {
+			if _, n, err := net.ParseCIDR(item); err == nil {
 				trustedProxyNets = append(trustedProxyNets, n)
 			} else {
-				log.Printf("忽略无效的 TRUSTED_PROXIES 条目: %q", raw)
+				log.Printf("忽略无效的 TRUSTED_PROXIES 条目: %q", item)
 			}
 		}
 	})
@@ -370,11 +514,9 @@ func normalizeIP(raw string) string {
 	if s == "" {
 		return ""
 	}
-	if strings.Contains(s, ":") && !strings.Contains(s, "::") {
-		// 形如 1.2.3.4:5678 或 [::1]:5678
-		if host, _, err := net.SplitHostPort(s); err == nil {
-			s = host
-		}
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		// 形如 1.2.3.4:5678 / [2001:db8::1]:5678
+		s = host
 	}
 	s = strings.TrimPrefix(s, "[")
 	s = strings.TrimSuffix(s, "]")

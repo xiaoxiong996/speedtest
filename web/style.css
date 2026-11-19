@@ -7,7 +7,7 @@
        url("/fonts/montserrat.woff2") format("woff2");
 }
 
-/* 表盘读数专用字体，与 speedtest.net 同款（数字窄、带脚衬线，等宽感） */
+/* 表盘读数专用字体：数字窄、带脚衬线，等宽感 */
 @font-face {
   font-family: "gauge-mono";
   font-style: normal;
@@ -35,12 +35,12 @@
   --mode-multi: #43b7ff;
   --mode-single: #ff9166;
   /* 与原版一致的图标配色：下载青绿、上传紫、延迟金、体验图标灰、评级圆点蓝灰 */
-  --ico-dl: #00c9c0;
-  --ico-ul: #b75cf0;
+  --ico-dl: #12d3c4;
+  --ico-ul: #b06bff;
   --ico-ping: #d4ac12;
   /* 带载延迟：多线程沿用青/紫，单线程换成橙/绿 */
-  --lat-dl: #00c9c0;
-  --lat-ul: #b75cf0;
+  --lat-dl: #12d3c4;
+  --lat-ul: #b06bff;
   --exp-ico: #9aa0a6;
   --exp-dot: rgba(255, 255, 255, 0.5);
   --exp-dot-on: #d5dae2;
@@ -51,7 +51,7 @@
 }
 
 [data-theme="light"] {
-  /* 原版 speedtest.net 浅色：浅灰页面底 + 纯白卡片 */
+  /* 浅色主题：浅灰页面底 + 纯白卡片 */
   --bg: #f4f5f7;
   --fg: #0a0c0e;
   --muted: #6b7280;
@@ -69,11 +69,11 @@
   --dot-off: rgba(0, 0, 0, 0.2);
   --mode-multi: #0076c9;
   --mode-single: #e56b4f;
-  --ico-dl: #00b3aa;
-  --ico-ul: #a84be0;
+  --ico-dl: #0fb9ad;
+  --ico-ul: #a45ce8;
   --ico-ping: #b89800;
-  --lat-dl: #00b3aa;
-  --lat-ul: #a84be0;
+  --lat-dl: #0fb9ad;
+  --lat-ul: #a45ce8;
   --exp-ico: #656565;
   --exp-dot: #9193a8;
   --exp-dot-on: #5f6470;
@@ -378,6 +378,13 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   .speed-card { padding: 24px 18px 20px; border-radius: 8px; }
 }
 
+/* 测速进行中：工具栏（结果/设置）、连接方式（多重/单一）、页脚说明都不显示 */
+body.testing .toolbar,
+body.testing .mode-block,
+body.testing .conn-row,
+body.testing #protoMain,
+body.testing .site-foot { display: none; }
+
 /* 卡片底部进度条：测速阶段推进，青→蓝渐变（与原版一致） */
 .card-progress {
   align-self: stretch;
@@ -395,7 +402,8 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, #2de5d1, #1fa4e9);
-  transition: width .5s ease;
+  /* 进度由脚本逐帧推进，这里不要再加 transition，否则会"追不上"目标值 */
+  transition: none;
 }
 @media (max-width: 620px) {
   .card-progress { margin: 22px -18px -20px; }
@@ -440,7 +448,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.dial.gauge { width: clamp(320px, 32vw, 360px); }
+.dial.gauge { width: clamp(352px, 35vw, 394px); }
 
 /* 表盘中心大数字：原版用 gauge-mono（窄体数字）+ 明显字距 */
 .dial.gauge .dial-value {
@@ -485,7 +493,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
   transition: stroke-dashoffset 0.2s linear;
 }
 
-/* 单一连接：橙色环（与 speedtest.net 一致） */
+/* 单一连接：橙色环 */
 .dial { --ring-glow: rgba(56, 190, 225, 0.48); }
 .dial[data-mode="single"] { --ring-glow: rgba(255, 150, 106, 0.5); }
 
@@ -545,23 +553,27 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .gauge-track {
   fill: none;
   stroke: var(--gauge-track);
-  stroke-width: 31;
-  stroke-linecap: round;
+  stroke-width: 24;
+  stroke-linecap: butt;
 }
 
-.gauge-arc {
-  fill: none;
-  stroke: url(#gaugeGrad);
-  stroke-width: 31;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 5px rgba(60, 190, 255, 0.3));
-  transition: stroke-dashoffset 0.26s linear;
+/* 彩色弧用 canvas 画（角度渐变 + 进度），叠在轨道之上、指针之下 */
+.gauge-canvas {
+  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
 }
+
+.dial.gauge .gauge-canvas { display: block; }
 
 .gauge-ticks text {
   fill: var(--gauge-tick, var(--muted));
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -586,15 +598,19 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 .gauge-needle polygon { filter: drop-shadow(0 0 7px rgba(220, 236, 255, 0.3)); }
 
 /* 指针渐变随主题：深色亮银、浅色深灰 */
-#needleGrad .ng1 { stop-color: #7f8998; stop-opacity: 0.30; }
-#needleGrad .ng2 { stop-color: #c6cfdb; stop-opacity: 0.62; }
-#needleGrad .ng3 { stop-color: #e9f0f8; stop-opacity: 0.92; }
-:root[data-theme="light"] #needleGrad .ng1 { stop-color: #2b3037; stop-opacity: 0.55; }
-:root[data-theme="light"] #needleGrad .ng2 { stop-color: #3d444d; stop-opacity: 0.85; }
-:root[data-theme="light"] #needleGrad .ng3 { stop-color: #1b1f24; stop-opacity: 1; }
+#needleGrad .ng1 { stop-color: #e6edf6; stop-opacity: 0.62; }
+#needleGrad .ng2 { stop-color: #97a3b2; stop-opacity: 0.5; }
+#needleGrad .ng3 { stop-color: #5a6472; stop-opacity: 0.18; }
+:root[data-theme="light"] #needleGrad .ng1 { stop-color: #1b1f24; stop-opacity: 0.82; }
+:root[data-theme="light"] #needleGrad .ng2 { stop-color: #55606d; stop-opacity: 0.5; }
+:root[data-theme="light"] #needleGrad .ng3 { stop-color: #b9c2cd; stop-opacity: 0.35; }
 :root[data-theme="light"] .gauge-needle polygon { filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.18)); }
 
-.dial.gauge .dial-center { padding-top: 23%; }
+.dial.gauge .dial-center {
+  /* 读数整体下移，贴着仪表盘底部：数字在上、Mbps 紧贴其下 */
+  justify-content: flex-start;
+  padding-top: 71%;
+}
 .dial.gauge .dial-unit {
   display: inline-flex;
   align-items: center;
@@ -730,7 +746,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .rb-btn:hover { border-color: var(--cyan); color: var(--cyan); }
 
-/* 连接信息：左=访客网络，中=两枚圆形按钮，右=测速节点（对齐 speedtest.net）
+/* 连接信息：左=访客网络，中=两枚圆形按钮，右=测速节点
    用三列网格保证中间两枚按钮永远落在 GO 圆环的正下方，
    两侧文案再长也不会把图标挤偏。 */
 
@@ -855,6 +871,12 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 /* 协议（IPv4 / IPv6）：出现在信息块下方、连接方式上方 */
 .proto-block { margin-top: 34px; }
 .proto-block[hidden] + .mode-block { margin-top: 40px; }
+/* 主页的协议切换：GO 圆环下方、连接方式上方，居中常显 */
+#protoMain { margin-top: 24px; text-align: center; }
+#protoMain .proto-row { justify-content: center; }
+/* 该协议没有可用节点：按钮常显但不可点 */
+.proto-opt.off { opacity: 0.35; cursor: not-allowed; }
+.proto-opt.off:hover { color: var(--muted); border-color: var(--line); }
 
 .proto-row { gap: 10px; }
 
@@ -1049,7 +1071,7 @@ img.logo-mark { object-fit: contain; border-radius: 4px; }
 
 .sp-btn:hover { border-color: var(--muted); background: var(--hover); }
 
-/* 设置展开时，下方这些区块让位给面板（与 speedtest.net 一致） */
+/* 设置展开时，下方这些区块让位给面板 */
 body.settings-open .conn-row,
 body.settings-open .proto-block,
 body.settings-open .mode-block,
@@ -1267,7 +1289,7 @@ body.settings-open .result-bar { display: none; }
   .lang-btn > span { display: none; }
   .header-inner { gap: 0; }
   .dial { width: clamp(176px, 52vw, 220px); }
-  .dial.gauge { width: min(78vw, 320px); }
+  .dial.gauge { width: min(80vw, 336px); }
   .metric-top { gap: 34px; }
   .mt-item { min-width: 92px; }
   .ping-row { gap: 16px; font-size: 12.5px; }
@@ -1289,8 +1311,8 @@ body.settings-open .result-bar { display: none; }
 /* 单线程：环、下载/上传、带载延迟整体换成橙 / 绿 */
 :root[data-conn="single"] {
   --ico-dl: #ff8a5c;
-  --ico-ul: #7cd828;
+  --ico-ul: #5ce03a;
   --lat-dl: #ff8a5c;
-  --lat-ul: #7cd828;
+  --lat-ul: #5ce03a;
 }
 :root[data-conn="single"] .dial { --ring-glow: rgba(255, 150, 106, 0.5); }

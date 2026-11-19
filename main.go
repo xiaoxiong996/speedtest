@@ -14,13 +14,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 )
 
-const appVersion = "1.2.48"
+const appVersion = "1.4.0"
 
 var errNodeNotFound = errors.New("node not found")
 
@@ -96,7 +97,15 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("测速服务已启动 %s (版本 %s, 站点 %s)", addr, appVersion, store.Get().Settings.SiteName)
+		cfgNow := store.Get()
+		log.Printf("测速服务已启动 %s (版本 %s, 站点 %s)", addr, appVersion, cfgNow.Settings.SiteName)
+		// 后台是隐藏路径，装完很容易忘。启动时明确打出来（日志只有服务器能看）。
+		adminDir := normalizeAdminPath(cfgNow.Settings.AdminPath)
+		if adminDir == "" {
+			adminDir = defaultAdminPath()
+		}
+		log.Printf("后台入口：/%s   （账号 %s；路径可在后台「站点设置 → 后台入口」里改）",
+			adminDir, cfgNow.Admin.Username)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("服务启动失败: %v", err)
 		}
@@ -176,10 +185,22 @@ func (s *Server) contentSecurityPolicy(r *http.Request) string {
 		}
 	}
 	list := make([]string, 0, len(origins))
+	// CSP 的 host-source 语法【不支持 IPv6 字面量】：写成 https://[2607:...]:8445 时
+	// 浏览器会判定为非法源并整条忽略（控制台报 invalid source），请求直接被 CSP 拦掉。
+	// 所以只要节点里有 IPv6 地址，connect-src 就退化成按协议放行（https:/http:），
+	// 其余指令（script-src、frame-ancestors 等）保持严格不变。
+	needSchemeWide := false
 	for o := range origins {
+		if strings.HasPrefix(o, "https://[") || strings.HasPrefix(o, "http://[") {
+			needSchemeWide = true
+			continue
+		}
 		list = append(list, o)
 	}
 	sort.Strings(list)
+	if needSchemeWide {
+		list = append(list, "https:", "http:")
+	}
 	// 下载测速用的是 Blob Worker，CSP 必须显式放行 blob:，否则浏览器直接拒绝创建 Worker。
 	return "default-src 'self'; script-src 'self' blob:; worker-src blob:; style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; font-src 'self' data:; connect-src " + strings.Join(list, " ") +
@@ -334,6 +355,9 @@ func (s *Server) handleSiteIcon(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// SVG 是同源资源，里面若带 <script> 就能在本站执行 —— 用 CSP 掐掉脚本与外部加载，
+	// 只留下图形本身需要的样式。
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
 	io.Copy(w, f)
 }
 
@@ -368,8 +392,45 @@ func (s *Server) injectBrand(doc string, r *http.Request) string {
 		doc = strings.ReplaceAll(doc, `<link rel="icon" href="/favicon.svg" type="image/svg+xml">`,
 			`<link rel="icon" href="`+safe+`">`)
 	}
+	// 后台（admin.html）的品牌区结构不同：<div class="a-brand"><svg .../><span id="headSite">SpeedTest</span>
+	// 名称与图标同样在服务端一次定好，避免进后台先闪默认名字 + 默认圆环图标。
+	doc = strings.ReplaceAll(doc, `<span id="headSite">SpeedTest</span>`, `<span id="headSite">`+esc+`</span>`)
+	if adminBrandRe.MatchString(doc) {
+		head := adminBrandRe.FindStringSubmatch(doc)[1]
+		repl := head
+		if !st.HideLogoIcon {
+			if icon := strings.TrimSpace(st.IconURL); icon != "" {
+				// 尺寸直接写在标签上：后台样式表版本不一致时也不会把整页撑爆
+				repl += `<img class="a-brand-icon" src="` + html.EscapeString(icon) +
+					`" alt="" width="24" height="24" style="width:24px;height:24px;object-fit:contain;border-radius:5px">`
+			} else {
+				repl += adminBrandRe.FindStringSubmatch(doc)[2]
+			}
+		}
+		doc = adminBrandRe.ReplaceAllString(doc, repl)
+	}
+	// 顶部 logo 的图标：全部在服务端一次定型，首帧就是最终样子。
+	//   · 勾了「不显示图标」 → 连默认圆环一起删掉，只留文字
+	//   · 有自定义图标       → 默认 <svg> 换成 <img>（以前靠 JS 插，刷新会先闪一下默认圆环）
+	//   · 都没有             → 保留默认圆环
+	if svgLogoRe.MatchString(doc) {
+		if st.HideLogoIcon {
+			doc = svgLogoRe.ReplaceAllString(doc, "")
+		} else if icon := strings.TrimSpace(st.IconURL); icon != "" {
+			doc = svgLogoRe.ReplaceAllString(doc,
+				`<img id="logoIcon" class="logo-mark" src="`+html.EscapeString(icon)+
+					`" alt="" width="20" height="20" style="width:20px;height:20px;object-fit:contain;border-radius:4px">`)
+		}
+	}
 	return doc
 }
+
+// 首页与报告页里写死的默认 logo（一段 <svg class="logo-mark">…</svg>）。
+// 只在自定义图标存在时才替换，没配图标就保持原样。
+var svgLogoRe = regexp.MustCompile(`(?s)<svg class="logo-mark".*?</svg>`)
+
+// 后台品牌区里那段默认的 <svg viewBox="0 0 32 32">…</svg>（第 2 段是 svg 本身）。
+var adminBrandRe = regexp.MustCompile(`(?s)(<div class="a-brand">\s*)(<svg.*?</svg>)`)
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {

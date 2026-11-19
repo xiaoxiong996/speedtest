@@ -31,12 +31,10 @@
       <div class="menu-panel" id="menuPanel" hidden>
         <button type="button" data-act="results" data-i18n="results">结果</button>
         <button type="button" data-act="settings" data-i18n="settings">设置</button>
-        <!-- 摆设：后台入口只在隐藏路径上，首页不放任何真实链接 -->
         <button type="button" data-fake-admin data-i18n="admin">管理后台</button>
       </div>
     </div>
 
-    <!-- 语言切换：文字 + 箭头，点击展开，与 speedtest.net 一致 -->
     <div class="lang-wrap">
       <button class="lang-btn" id="langBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Languages menu" data-i18n-aria="languagesMenu">
         <span id="langLabel">中文(简体)</span>
@@ -57,7 +55,6 @@
     </button>
 
     <div class="header-right">
-      <!-- 外观与原版一致：Download 下拉 + Sign In；均为摆设，不暴露后台入口 -->
       <button class="pill-btn pill-download" type="button" data-fake-admin>
         <span data-i18n="downloadApp">下载</span>
         <svg viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -85,7 +82,6 @@
 
   <div class="speed-card" id="speedCard">
 
-  <!-- 测速中的下载 / 上传（图标与原版一致：青绿圆圈下箭头 / 紫色圆圈上箭头） -->
   <div class="metric-top" id="metricTop" hidden>
     <div class="mt-item">
       <div class="mt-label">
@@ -118,7 +114,6 @@
       </svg>
       <b id="pgPing">--</b>
     </span>
-    <!-- 下载延迟：下载阶段并行测得的延迟，图标是橙红下箭头（与原版一致） -->
     <span class="ping-val" data-i18n-title="downLatTip" title="下载延迟">
       <svg class="pico lat-dl" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9.3" stroke-width="1.6"/>
@@ -135,7 +130,6 @@
     </span>
   </div>
 
-  <!-- 体验指标：浏览网页 / 游戏 / 视频 / 通话，图标与原版一致 -->
   <div class="exp-row" id="expRow" hidden>
     <div class="exp" data-exp="web" data-i18n-title="expWeb">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
@@ -197,28 +191,22 @@
     </svg>
 
     <svg class="gauge-svg" viewBox="0 0 400 400" aria-hidden="true">
-      <defs>
-        <linearGradient id="gaugeGrad" gradientUnits="userSpaceOnUse" x1="94" y1="306" x2="306" y2="94">
-          <stop offset="0%" stop-color="#1f5dff"/>
-          <stop offset="55%" stop-color="#3f9dfb"/>
-          <stop offset="100%" stop-color="#5dd4f0"/>
-        </linearGradient>
-      </defs>
       <path class="gauge-track" d="M96.06 303.94 A147 147 0 1 1 303.94 303.94"/>
-      <path class="gauge-arc" id="gaugeArc" d="M96.06 303.94 A147 147 0 1 1 303.94 303.94"/>
       <g class="gauge-ticks" id="gaugeTicks"></g>
     </svg>
 
+    <canvas class="gauge-canvas" id="gaugeCanvas" width="800" height="800" aria-hidden="true"></canvas>
+
     <svg class="needle-svg" viewBox="0 0 400 400" aria-hidden="true">
       <defs>
-        <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="203" x2="200" y2="122">
-          <stop class="ng1" offset="0%" stop-color="#7f8998" stop-opacity="0.30"/>
-          <stop class="ng2" offset="58%" stop-color="#c6cfdb" stop-opacity="0.62"/>
-          <stop class="ng3" offset="100%" stop-color="#e9f0f8" stop-opacity="0.92"/>
+        <linearGradient id="needleGrad" gradientUnits="userSpaceOnUse" x1="200" y1="200" x2="200" y2="106">
+          <stop class="ng1" offset="0%" stop-color="#e6edf6" stop-opacity="0.62"/>
+          <stop class="ng2" offset="52%" stop-color="#97a3b2" stop-opacity="0.5"/>
+          <stop class="ng3" offset="100%" stop-color="#5a6472" stop-opacity="0.18"/>
         </linearGradient>
       </defs>
       <g class="gauge-needle" id="gaugeNeedle">
-        <polygon points="198.5,203 201.5,203 211,122 189,122" fill="url(#needleGrad)"/>
+        <polygon points="190,200 210,200 205.75,106 194.25,106" fill="url(#needleGrad)"/>
       </g>
     </svg>
 
@@ -246,7 +234,6 @@
     <a class="rb-btn" id="openResult" href="/" data-i18n="viewReport">查看报告</a>
   </div>
 
-  <!-- 访客网络 · 功能区 · 测速节点，中间两颗圆形按钮与 speedtest.net 一致 -->
   <div class="conn-row">
     <div class="conn-side conn-client">
       <div class="cb-title"><span id="ispName" data-i18n="yourNetwork">你的网络</span><span class="asn-tag" id="asnTag" hidden></span></div>
@@ -281,9 +268,7 @@
 
   <div class="card-progress" id="cardProgress" aria-hidden="true"><i id="cardProgressFill"></i></div>
 
-  </div><!-- /speed-card -->
-
-  <!-- 设置面板：点顶部的「设置」展开，选项与 speedtest.net 的 SETTINGS 一致 -->
+  </div>
   <div class="settings-panel" id="settingsPanel" hidden>
     <div class="sp-grid">
       <section class="sp-col">
@@ -304,20 +289,12 @@
           </select>
         </div>
         <div class="sp-row">
-          <span class="sp-key" data-i18n="spDistance">距离</span>
-          <div class="sp-opts" data-pref="dist">
-            <button class="sp-opt" type="button" data-val="mi" data-i18n="spMiles">英里</button>
-            <button class="sp-opt" type="button" data-val="km" data-i18n="spKm">公里</button>
-          </div>
-        </div>
-        <div class="sp-row">
           <span class="sp-key" data-i18n="spSpeed">速度</span>
           <div class="sp-opts" data-pref="speed">
             <button class="sp-opt" type="button" data-val="mbps">Mbps</button>
             <button class="sp-opt" type="button" data-val="kbps">Kbps</button>
           </div>
         </div>
-        <!-- 示例行：四个选项的效果立刻可见，不用等测速 -->
         <div class="sp-preview" id="spPreview"></div>
       </section>
 
@@ -327,7 +304,6 @@
         <div class="sp-line sp-ip" id="spIp">--</div>
         <div class="sp-line" id="spLoc">--</div>
         <div class="sp-line" id="spGeo">--</div>
-        <!-- 协议：IPv4 / IPv6（后台配了 IPv6 节点才会出现） -->
         <div class="sp-row" id="protoBlock" hidden>
           <span class="sp-key" data-i18n="protocol">协议</span>
           <div class="sp-opts proto-row">
@@ -345,6 +321,13 @@
         <div class="sp-line" id="spNodeProto"></div>
         <button class="sp-btn" id="spChangeNode" type="button" data-i18n="selectServer">选择测速节点</button>
       </section>
+    </div>
+  </div>
+
+  <div class="proto-block" id="protoMain">
+    <div class="proto-row sp-opts">
+      <button class="proto-opt active" data-family="v4" type="button">IPv4</button>
+      <button class="proto-opt" data-family="v6" type="button">IPv6</button>
     </div>
   </div>
 
@@ -371,7 +354,6 @@
 
 <footer class="site-foot" id="footNote"></footer>
 
-<!-- 节点 / 设置弹窗 -->
 <div class="modal" id="serverModal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true">
     <div class="modal-head">
@@ -382,7 +364,6 @@
   </div>
 </div>
 
-<!-- 本机测速历史：点「结果」打开，记录存在这台浏览器里 -->
 <div class="modal" id="historyModal" hidden>
   <div class="modal-panel hist-panel" role="dialog" aria-modal="true">
     <div class="modal-head">

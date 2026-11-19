@@ -1,61 +1,110 @@
-# ===== 纯测速节点版（无 web、无后台、不落盘）=====
-# 一键部署：docker compose -f docker-compose.node.yml up -d --build
-# 从 GitHub 拉镜像：IMAGE=ghcr.io/你的用户名/仓库名:1.2.36 docker compose -f docker-compose.node.yml up -d
+# ============================================================================
+#  测速节点版 —— 只走 Let's Encrypt 证书，只开一个端口
+# ----------------------------------------------------------------------------
+#  用法：
+#    1) 改下面 NODE_ACME_DOMAINS 为你的域名（必须已解析到本机公网 IP，DNS 灰云直连）
+#    2) docker compose -f docker-compose.node.yml up -d
+#    3) 把 https://<域名>:8445 填进主控后台的「节点地址」
 #
-# 安全设计：
-#  - APP_MODE=node：进程里只注册测速端点，没有任何后台/报告/静态页面路由
-#  - 不挂载 data 卷、不写 config.json / results.jsonl，容器只读也能跑
-#  - 配置只在启动时从下面环境变量读入一次，运行期无法被外部请求修改
-#  - 根文件系统只读 + 丢弃所有 Linux capabilities + 禁止提权
+#  证书：Let's Encrypt（访客零配置，不用装任何根证书）。两种来源：
+#        · 有公网 443  → NODE_TLS_MODE=acme，全自动签发 + 续期
+#        · 只有高端口（NAT）→ NODE_TLS_MODE=file，用 deploy/issue-cert.sh 走 DNS 手动验证
+#  端口：host 网络下节点只监听 NODE_PORT 一个端口，没有页面、没有后台、没有第二个端口。
+# ============================================================================
 services:
   speedtest-node:
-    image: "${IMAGE:-speedtest-node:1.2.48}"
-    build:
-      context: .
+    image: "${IMAGE:-speedtest-node:1.4.0}"
     container_name: speedtest-node
     restart: unless-stopped
-    network_mode: host          # 节点直接对外暴露测速端口，拿到访客真实 IP
-    read_only: true             # 根文件系统只读，杜绝写入/注入
-    cap_drop:
-      - ALL                     # 丢弃全部 capabilities
-    security_opt:
-      - no-new-privileges:true  # 禁止进程提权
-    pids_limit: 256
-    environment:
-      APP_MODE: "node"
-      HTTP_HOST: "${HTTP_HOST:-0.0.0.0}"      # 节点需对外，监听所有网卡
-      HTTP_PORT: "${NODE_PORT:-8443}"          # 注意避开主控的 3333
-      TZ: Asia/Shanghai
 
-      # ------- 三道访问白名单（全部来自 Compose，启动后不可改）-------
-      # 允许访问测速的访客 IP 段，逗号分隔；留空=不限制。支持单 IP / CIDR，v4 v6 均可。
-      # 例：1.2.3.0/24,2001:db8::/32
-      NODE_ALLOW_CIDRS: "${NODE_ALLOW_CIDRS:-}"
-      # 允许访问的域名（Host 头，小写，支持 *.example.com 通配）；留空=不限制。
-      NODE_ALLOW_HOSTS: "${NODE_ALLOW_HOSTS:-}"
-      # 允许跨源调用的 Origin（主控站域名，带 https://）；留空=任意 Origin。
-      # 例：https://speed.example.com
+    # host 网络：容器直接用宿主机网卡，主控才能看到访客真实 IP。
+    # 端口不在这里映射，只由下面的 NODE_PORT 决定。
+    network_mode: host
+
+    # 加固：只读根文件系统 + 丢弃全部 capability。
+    # 面板签发证书要写 acme.sh 目录，所以额外挂一个可写卷给它。
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=16m          # 只读根目录下需要临时目录
+      - /data:size=1m          # 兜住镜像声明的 VOLUME，保证节点不落盘
+
+    environment:
+      APP_MODE: "node"                  # 节点模式：只注册测速端点，没有页面/后台
+
+      # ★ 主控连接端口：节点只监听这一个，主控后台填 https://<域名>:<这个端口>
+      HTTP_PORT: "${NODE_PORT:-8445}"
+      HTTP_HOST: "0.0.0.0"              # host 网络下必须 0.0.0.0 才对公网可用
+
+      # ---- 证书：二选一 ----
+      # acme（默认）：内置自动签发，需要公网 443 能打到本机
+      # file       ：读下面指定的证书文件。NAT 机器（没有 80/443）用这个，
+      #              证书由 deploy/issue-cert.sh 走 DNS 手动验证签发
+      NODE_TLS_MODE: "${NODE_TLS_MODE:-acme}"
+      NODE_TLS_CERT: "${NODE_TLS_CERT:-/certs/cert.pem}"
+      NODE_TLS_KEY: "${NODE_TLS_KEY:-/certs/key.pem}"
+
+      # acme 模式需要：证书域名，逗号分隔，第一个为主域名（须解析到本机公网 IP）
+      NODE_ACME_DOMAINS: "${NODE_ACME_DOMAINS:-}"
+      NODE_ACME_EMAIL: "${NODE_ACME_EMAIL:-}"            # 到期提醒邮箱（可选）
+      NODE_ACME_DIR: "${NODE_ACME_DIR:-/certs/acme}"     # 证书缓存，删了会重新申请
+      NODE_ACME_STAGING: "${NODE_ACME_STAGING:-0}"       # 1=测试环境（调试用，证书不被信任）
+
+      # ★ 只允许你的主控站调用（留空=任何网站都能用你的带宽）
       NODE_ALLOW_ORIGINS: "${NODE_ALLOW_ORIGINS:-}"
-      # 测速端点 base 路径，加在 /api 之前；留空=/api/ping；填 /s3cr3t 则端点为 /s3cr3t/api/ping。
-      # 主控后台「节点地址」要填成 https://域名:端口 + 该前缀。
+      # 可选再收紧：允许的 Host、允许测速的访客 IP 段
+      NODE_ALLOW_HOSTS: "${NODE_ALLOW_HOSTS:-}"
+      NODE_ALLOW_CIDRS: "${NODE_ALLOW_CIDRS:-}"
+      # DDNS：把域名自动指向本机当前公网 IP（动态 IP 必备）。
+      # 格式 "域名:A,域名2:AAAA"，用面板里的同一个 Cloudflare Token 更新记录。
+      # 也可在面板里加减，面板的改动只在内存生效（重启回到这里的值）。
+      NODE_DDNS: "${NODE_DDNS:-}"
+      NODE_DDNS_INTERVAL: "${NODE_DDNS_INTERVAL:-5}"   # 检查间隔（分钟）
+      # 路径前缀：留空 = /api/ping；填 /n1 = /n1/api/ping（主控地址要带上它）
       NODE_PATH_PREFIX: "${NODE_PATH_PREFIX:-}"
 
-      # 真实 IP：节点直连时留空即可（RemoteAddr 即真实访客）；若节点也套了 CDN/反代，照主控那样配
-      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
-      TRUSTED_IP_HEADERS: "${TRUSTED_IP_HEADERS:-X-Real-IP}"
-      LOG_CLIENT_IP: "${LOG_CLIENT_IP:-0}"
+      # ★ 节点自己的面板（隐藏路径 + 账号密码）。留空路径或账号密码 = 不启用面板。
+      # 面板与测速端点共用同一个端口，不用额外开端口。
+      NODE_PANEL_PATH: "${NODE_PANEL_PATH:-}"
+      NODE_PANEL_USER: "${NODE_PANEL_USER:-}"
+      NODE_PANEL_PASS: "${NODE_PANEL_PASS:-}"
+      # 证书目录 & acme.sh 安装目录（面板签发证书用）
+      NODE_CERT_DIR: "${NODE_CERT_DIR:-/certs}"
+      # 证书到期前多少天自动续期
+      NODE_CERT_RENEW_DAYS: "${NODE_CERT_RENEW_DAYS:-30}"
+      # Cloudflare API Token：填了就是全自动（自动加 TXT、自动续期）
+      # 留空则手动模式（面板显示 TXT，你去 DNS 后台加）
+      CF_DNS_API_TOKEN: "${CF_DNS_API_TOKEN:-}"
+      # 首次部署还没有证书时，额外开一个纯 HTTP 端口给面板用（默认 HTTPS 端口+1），
+      # 签好证书或超时后自动关闭。设 0 = 完全不开。
+      NODE_HTTP_BOOTSTRAP_MINUTES: "${NODE_HTTP_BOOTSTRAP_MINUTES:-10}"
+      NODE_HTTP_PORT: "${NODE_HTTP_PORT:-}"
+
+      TZ: "${TZ:-Asia/Shanghai}"
+
+    volumes:
+      - ./certs:/certs:rw         # 证书：签好后放这里，备份它=备份证书
+      - ./acme:/certs/acme:rw     # ACME 账户密钥（续期靠它，别删）
+
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
+
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:${NODE_PORT:-8443}/healthz >/dev/null || exit 1"]
+      # 首次握手才签证书，容器内没有域名 SNI 会握手失败，所以只探端口连通性
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${NODE_PORT:-8445} || exit 1"]
       interval: 30s
-      timeout: 4s
-      start_period: 5s
+      timeout: 5s
+      start_period: 15s
       retries: 3

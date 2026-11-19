@@ -19,7 +19,7 @@
     phase: $("phaseLabel"),
     value: $("dialValue"),
     unit: $("dialUnit"),
-    gaugeArc: $("gaugeArc"),
+    gaugeCanvas: $("gaugeCanvas"),
     gaugeTicks: $("gaugeTicks"),
     needleGrad: $("needleGrad"),
     gaugeNeedle: $("gaugeNeedle"),
@@ -77,8 +77,6 @@
 
   var G = { cx: 200, cy: 200, r: 147, start: 135, sweep: 270, tickR: 104 };
   var G_LEN = 2 * Math.PI * G.r * (G.sweep / 360);
-  els.gaugeArc.style.strokeDasharray = G_LEN + " " + G_LEN;
-  els.gaugeArc.style.strokeDashoffset = G_LEN;
 
   var TICK_VALUES = [0, 5, 10, 50, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000];
 
@@ -124,20 +122,32 @@
   var gaugeMax = 1000;
   var spinRaf = 0;
 
-  /* 圆环与仪表盘渐变：多连接 = 青蓝，单一连接 = 橙（对齐 speedtest.net） */
+  /* 圆环与仪表盘渐变：多连接 = 青蓝，单一连接 = 橙 */
   var RING_COLORS = {
     multi: ["#2de5d1", "#1fa4e9"],
     single: ["#ffd684", "#ff886a"]
   };
-  var GAUGE_COLORS = {
-    // 原版 speedtest.net：左下深蓝 → 中段蓝 → 顶部/右上亮青（不过分发白）
-    multi: ["#1f5dff", "#6ae3f8", "#56cdec"],
-    single: ["#ffd684", "#ffab7a", "#ff886a"]
-  };
-  // 上行阶段整条弧换成上行色，和顶部的上行图标同步
-  var UP_GAUGE_COLORS = {
-    multi: ["#6d28d9", "#a855f7", "#c77dff"],
-    single: ["#5fb51e", "#8fd94a", "#b6e878"]
+  /* 表盘弧：按弧长位置着色的角度渐变（0 = 起点，1 = 满量程）。
+     0→10 兆是弧长的前 1/4（刻度等角度均布），这段保持「起点深色」；
+     过了 10 兆继续往上，颜色一路贴近该指标自己的图标色：
+     下载青绿、上传紫、单线下行橙、单线上行绿。 */
+  var ARC_RAMPS = {
+    multiDown: {
+      dark:  [[0, "#0fa6e2"], [0.25, "#22d0ea"], [0.5, "#46e39c"], [1, "#6cf095"]],
+      light: [[0, "#1eb2e8"], [0.25, "#31d8ef"], [0.5, "#4feba6"], [1, "#7bf5a0"]]
+    },
+    multiUp: {
+      dark:  [[0, "#6b2fe0"], [0.25, "#a855f7"], [0.5, "#c084fc"], [1, "#d6a8ff"]],
+      light: [[0, "#7a45e8"], [0.25, "#b06bff"], [0.5, "#c893ff"], [1, "#dcb6ff"]]
+    },
+    singleDown: {
+      dark:  [[0, "#ff5f6d"], [0.25, "#ff8264"], [0.5, "#ffa544"], [1, "#ffc84d"]],
+      light: [[0, "#ff6b78"], [0.25, "#ff8f72"], [0.5, "#ffb04f"], [1, "#ffd05c"]]
+    },
+    singleUp: {
+      dark:  [[0, "#2cd35f"], [0.25, "#63e04a"], [0.5, "#a8ea3c"], [1, "#cff25f"]],
+      light: [[0, "#37e06a"], [0.25, "#74ea55"], [0.5, "#b4f04a"], [1, "#d8f76f"]]
+    }
   };
 
   function setStops(id, colors) {
@@ -149,13 +159,102 @@
     }
   }
 
+  /* ---------------- 表盘彩色弧（canvas：角度渐变 + 进度） ---------------- */
+
+  var ARC_W = 24;                 // 弧带宽度（viewBox 单位）
+  var arcCur = 0;
+  var arcTarget = 0;
+  var arcRaf = 0;
+  var arcRamp = "multiDown";
+
+  function themeKey() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+
+  function rampStops(name) {
+    var def = ARC_RAMPS[name] || ARC_RAMPS.multiDown;
+    return def[themeKey()] || def.dark;
+  }
+
+  // 画到 p（0~1）：conic 渐变按「当前进度」铺满，起点深、末端浅
+  function drawArc(p) {
+    var cv = els.gaugeCanvas;
+    if (!cv) return;
+    var ctx = cv.getContext("2d");
+    if (!ctx) return;
+    var dpr = cv.width / 400;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, 400, 400);
+    if (p <= 0.0008) return;
+
+    var stops = rampStops(arcRamp);
+    var a0 = G.start * Math.PI / 180;
+    var a1 = (G.start + G.sweep * p) * Math.PI / 180;
+    var grad;
+    if (ctx.createConicGradient) {
+      // 色标固定铺在整段 270° 弧上：弧走多长，颜色就是那一段该有的色，
+      // 起点深、越往上越浅，不同量程/进度下同一位次颜色一致
+      grad = ctx.createConicGradient(a0, G.cx, G.cy);
+      var full = G.sweep / 360;
+      for (var i = 0; i < stops.length; i++) {
+        grad.addColorStop(Math.min(1, stops[i][0] * full), stops[i][1]);
+      }
+      grad.addColorStop(Math.min(1, full + 0.0001), stops[stops.length - 1][1]);
+    } else {
+      // 老浏览器没有 conic：退回对角线性渐变
+      grad = ctx.createLinearGradient(G.cx - G.r * 0.7, G.cy + G.r * 0.7, G.cx + G.r * 0.7, G.cy - G.r * 0.7);
+      for (var j = 0; j < stops.length; j++) grad.addColorStop(stops[j][0], stops[j][1]);
+    }
+
+    ctx.beginPath();
+    ctx.arc(G.cx, G.cy, G.r, a0, a1);
+    ctx.lineWidth = ARC_W;
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = grad;
+    ctx.shadowColor = themeKey() === "light" ? "rgba(60,150,220,0.16)" : "rgba(60,190,255,0.30)";
+    ctx.shadowBlur = 5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // 缓动到目标进度，测速读数跳变时弧也是顺过去的
+  function tickArc() {
+    var d = arcTarget - arcCur;
+    if (Math.abs(d) < 0.0015) {
+      arcCur = arcTarget;
+      drawArc(arcCur);
+      arcRaf = 0;
+      return;
+    }
+    arcCur += d * 0.22;
+    drawArc(arcCur);
+    arcRaf = requestAnimationFrame(tickArc);
+  }
+
+  function setArcProgress(p) {
+    arcTarget = Math.max(0, Math.min(1, p || 0));
+    if (Math.abs(arcTarget - arcCur) < 0.0015) {
+      if (arcRaf) { cancelAnimationFrame(arcRaf); arcRaf = 0; }
+      arcCur = arcTarget;
+      drawArc(arcCur);
+      return;
+    }
+    if (!arcRaf) arcRaf = requestAnimationFrame(tickArc);
+  }
+
+  function setArcRamp(name) {
+    if (!ARC_RAMPS[name]) return;
+    arcRamp = name;
+    drawArc(arcCur);
+  }
+
   function applyMode() {
     var single = state.mode === "single";
     if (els.dial) els.dial.setAttribute("data-mode", single ? "single" : "multi");
     // 单线程是橙/绿配色，多线程是青/紫，靠根节点属性整体换色
     document.documentElement.setAttribute("data-conn", single ? "single" : "multi");
     setStops("ringGrad", single ? RING_COLORS.single : RING_COLORS.multi);
-    setStops("gaugeGrad", single ? GAUGE_COLORS.single : GAUGE_COLORS.multi);
+    setArcRamp(single ? "singleDown" : "multiDown");
   }
 
   /* ---------------- 小工具 ---------------- */
@@ -176,31 +275,6 @@
 
   function speedUnit() {
     return window.PREFS ? PREFS.speedUnit() : "Mbps";
-  }
-
-  // 两点间球面距离（公里）：给节点列表显示「距离」用
-  function distKm(a, b) {
-    if (!a || !b) return NaN;
-    if (!a.lat && !a.lon) return NaN;   // 访客坐标未知
-    if (!b.lat && !b.lon) return NaN;   // 节点没配经纬度
-    if (!isFinite(a.lat) || !isFinite(b.lat)) return NaN;
-    var R = 6371;
-    var dLat = (b.lat - a.lat) * Math.PI / 180;
-    var dLon = (b.lon - a.lon) * Math.PI / 180;
-    var s = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
-  }
-
-  // 访客到某个节点的距离文案（任一端没有坐标时返回空串）
-  function nodeDistText(n) {
-    if (!window.PREFS || !n) return "";
-    var me = clientOf(state.family);
-    if (!me) return "";
-    var km = distKm(me, n);
-    if (!isFinite(km)) return "";
-    return PREFS.distText(km);
   }
 
   function fmtPing(v) {
@@ -263,18 +337,29 @@
     }
   }
 
+  // 页面本身是 HTTPS 时，浏览器会把 http:// 的子请求当成混合内容直接拦掉
+  // （测速全部 0、丢包 100% 就是这么来的）。节点普遍已经能走 TLS，
+  // 这里统一把节点地址升级成 https，省得还要去后台逐条改。
+  function secureURL(u) {
+    u = (u || "").trim();
+    if (u && location.protocol === "https:" && /^http:\/\//i.test(u)) {
+      return "https://" + u.slice(7);
+    }
+    return u;
+  }
+
   // 当前协议下该节点使用的接入地址：IPv6 取 url6，IPv4 取 url
   function nodeURL(node) {
     if (!node) return "";
-    return ((state.family === "v6" ? node.url6 : node.url) || "").trim();
+    return secureURL((state.family === "v6" ? node.url6 : node.url) || "");
   }
 
-  // 节点是否支持某个协议；本机节点两个地址都留空时视为走当前访问地址，双栈都算可用
+  // 节点是否支持某个协议：只看它自己配的 url / url6。
+  // 主控不再自带测速节点，所以没有「跟当前地址」的兜底了。
   function hasFamily(node, fam) {
     if (!node) return false;
     var explicit = fam === "v6" ? (node.url6 || "").trim() : (node.url || "").trim();
-    if (explicit) return true;
-    return !!node.local && !(node.url || "").trim() && !(node.url6 || "").trim();
+    return !!explicit;
   }
 
   function availableNodes() {
@@ -284,11 +369,6 @@
   function baseOf(node) {
     if (!node) return "";
     var u = nodeURL(node).replace(/\/+$/, "");
-    // 本机节点没填地址时跟随当前访问地址；切到另一种协议时，
-    // 改用探测到的该协议地址，否则测速流量仍会走打开页面的那个协议。
-    if (!u && node.local && state.family !== state.pageFamily) {
-      u = state.localBase[state.family] || "";
-    }
     if (!u || u === location.origin) return "";
     return u;
   }
@@ -297,7 +377,7 @@
     return state.mode === "single" ? 1 : Math.max(1, state.settings.maxConnections || 4);
   }
 
-  /* 原版 speedtest.net 的仪表刻度：一组固定档位标签在弧上【等角度均布】，
+  /* 仪表刻度：一组固定档位标签在弧上【等角度均布】，
      指针/弧填充在相邻档位之间按数值线性插值（不是对数！）。
      实测原版 max=1000：0/5/10/50/100/250/500/750/1000 均分 270°，误差<2°。 */
   var TICK_LADDERS = [
@@ -401,14 +481,10 @@
     if (!max) max = 1000;
     var p = speedToProgress(speed, max);
     var deg = G.start + p * G.sweep + 90;
-    els.gaugeArc.style.strokeDashoffset = G_LEN * (1 - p);
+    setArcProgress(p);
     els.gaugeNeedle.style.transform = "rotate(" + deg.toFixed(2) + "deg)";
-    // 指针的高光是「页面上亮、下方暗」的固定方向（原版如此）：
-    // 指针朝上时尖端发亮，朝左下时整体偏暗，所以渐变要反向抵消旋转
-    if (els.needleGrad) {
-      els.needleGrad.setAttribute("gradientTransform",
-        "rotate(" + (-deg).toFixed(2) + " " + G.cx + " " + G.cy + ")");
-    }
+    // 指针渐变跟着指针走：根部亮、往外渐暗，任何角度看着都一致
+    if (els.needleGrad) els.needleGrad.removeAttribute("gradientTransform");
   }
 
   /* 表盘量程档位：读数稳定后收敛到一个整齐的档位，之后只往上扩，
@@ -441,21 +517,47 @@
 
   /* ---------------- 体验评级 ---------------- */
 
-  // 速度类：steps 是 4 个门槛，达到几档就给几点（最低 1 点，最高 5 点）
-  function levelBySpeed(v, steps) {
-    if (!isFinite(v) || v <= 0) return 0;
-    var n = 1;
-    for (var i = 0; i < steps.length; i++) if (v >= steps[i]) n = i + 2;
-    return Math.min(5, n);
+  // 5 档评级门槛的默认值。后台「评级标准」可改，服务端通过 settings.ratingCfg 下发。
+  var RATING_DEF = {
+    jitterWeight: 2,
+    web: [40, 80, 150, 300],
+    game: [30, 60, 100, 180],
+    video: [50, 100, 180, 320],
+    call: [40, 80, 140, 240],
+    loss: [0.1, 0.5, 1.5, 4]
+  };
+
+  function ratingSteps(v, def) {
+    if (!v || v.length !== def.length) return def;
+    for (var i = 0; i < v.length; i++) if (!isFinite(v[i]) || v[i] < 0) return def;
+    return v;
   }
 
-  // 延迟类：越小越好
-  function levelByPing(ms) {
+  function ratingCfg() {
+    var c = (state.settings && state.settings.ratingCfg) || {};
+    return {
+      jitterWeight: isFinite(c.jitterWeight) && c.jitterWeight >= 0 ? c.jitterWeight : RATING_DEF.jitterWeight,
+      web: ratingSteps(c.web, RATING_DEF.web),
+      game: ratingSteps(c.game, RATING_DEF.game),
+      video: ratingSteps(c.video, RATING_DEF.video),
+      call: ratingSteps(c.call, RATING_DEF.call),
+      loss: ratingSteps(c.loss, RATING_DEF.loss)
+    };
+  }
+
+  // 延迟类评级：有效延迟 = 延迟 + 抖动 × 权重，再用 4 个阈值切成 5 档（越小越好）。
+  // steps 是后台配的 4 个门槛（升序）：≤t1 → 5 点，≤t2 → 4 点，≤t3 → 3 点，≤t4 → 2 点，否则 1 点。
+  function levelByLatency(ms, jitter, steps) {
     if (!isFinite(ms) || ms <= 0) return 0;
-    if (ms <= 15) return 5;
-    if (ms <= 30) return 4;
-    if (ms <= 60) return 3;
-    if (ms <= 100) return 2;
+    var eff = ms + Math.max(0, isFinite(jitter) ? jitter : 0) * ratingCfg().jitterWeight;
+    for (var i = 0; i < steps.length; i++) if (eff <= steps[i]) return 5 - i;
+    return 1;
+  }
+
+  // 丢包评级：百分比，同样是 4 个阈值切 5 档（越小越好）。
+  function levelByLoss(pct, steps) {
+    var v = isFinite(pct) ? pct : 0;
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) return 5 - i;
     return 1;
   }
 
@@ -468,12 +570,14 @@
     }
   }
 
-  function renderExp(down, up, ping) {
+  // 四个体验指标都按「延迟 + 抖动」评级，门槛各自后台可调
+  function renderExp(ping, jitter) {
+    var c = ratingCfg();
     var lv = {
-      web: levelBySpeed(down, [5, 10, 25, 50]),
-      game: levelByPing(ping),
-      video: levelBySpeed(down, [5, 10, 25, 50]),
-      call: levelBySpeed(up, [1, 2, 5, 10])
+      web: levelByLatency(ping, jitter, c.web),
+      game: levelByLatency(ping, jitter, c.game),
+      video: levelByLatency(ping, jitter, c.video),
+      call: levelByLatency(ping, jitter, c.call)
     };
     var boxes = document.querySelectorAll("#expRow .exp");
     for (var i = 0; i < boxes.length; i++) {
@@ -517,10 +621,45 @@
     }
   }
 
-  // 卡片底部进度条：0~100，测速各阶段推进
-  function setCardProgress(pct) {
+  /* 卡片底部进度条
+     以前只在阶段切换时跳一下（0→12→55→92→100），看起来像"卡住然后猛跳"。
+     现在改成用 rAF 按时间连续推进：阶段一开始就匀速（带缓出）走向该阶段终点，
+     阶段真正结束时再校准到精确值，视觉上是一直在走的。 */
+  var progCur = 0;
+  var progRaf = 0;
+
+  function paintProgress(v) {
     if (!els.cardProgressFill) return;
-    els.cardProgressFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    els.cardProgressFill.style.width = Math.max(0, Math.min(100, v)) + "%";
+  }
+
+  function stopProgressRamp() {
+    if (progRaf) cancelAnimationFrame(progRaf);
+    progRaf = 0;
+  }
+
+  // 立即设定（用于复位/阶段结束后的校准）
+  function setCardProgress(pct) {
+    stopProgressRamp();
+    progCur = Math.max(0, Math.min(100, pct));
+    paintProgress(progCur);
+  }
+
+  // 在 ms 毫秒内从当前值平滑推进到 to（缓出，前快后慢，更像实时进度）
+  function rampProgress(to, ms) {
+    stopProgressRamp();
+    var from = progCur;
+    var target = Math.max(0, Math.min(100, to));
+    var dur = Math.max(120, ms || 0);
+    var t0 = performance.now();
+    function step(now) {
+      var k = Math.min(1, (now - t0) / dur);
+      var e = 1 - Math.pow(1 - k, 1.6);   // ease-out：一开始走得快，接近终点变慢
+      progCur = from + (target - from) * e;
+      paintProgress(progCur);
+      progRaf = k < 1 ? requestAnimationFrame(step) : 0;
+    }
+    progRaf = requestAnimationFrame(step);
   }
 
   function resetDial() {
@@ -532,7 +671,7 @@
     els.pingRow.hidden = true;
     els.expRow.hidden = true;
     if (els.mtUpItem) els.mtUpItem.classList.remove("live");
-    renderExp(0, 0, 0);
+    renderExp(0, 0);
     els.resultBar.hidden = true;
     setDial("GO", "", "", false);
   }
@@ -540,7 +679,9 @@
   function enterGaugeMode() {
     els.dial.classList.add("gauge");
     if (els.speedCard) els.speedCard.classList.add("testing");
+    // 起始阶段（测延迟）也要动起来，否则会先干等几秒才跳；真测到延迟后再校准到 12%
     setCardProgress(4);
+    rampProgress(12, 4000);
     els.dial.classList.remove("up");
     if (els.mtUpItem) els.mtUpItem.classList.remove("live");
     buildTicks(gaugeMax);
@@ -553,7 +694,7 @@
     els.pgDownLat.textContent = "--";
     els.pgUpLat.textContent = "--";
     els.expRow.hidden = false;
-    renderExp(0, 0, 0);
+    renderExp(0, 0);
   }
 
   /* ---------------- 主题 ---------------- */
@@ -561,6 +702,7 @@
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     try { localStorage.setItem("st_theme", theme); } catch (e) {}
+    drawArc(arcCur);
   }
 
   function initTheme() {
@@ -598,9 +740,6 @@
         state.isAdmin = !!(data && data.admin);
         state.addrs = (data && data.addrs) || { v4: [], v6: [] };
         state.nodes = (data && data.servers) || [];
-        if (!state.nodes.length && data && data.node) {
-          state.nodes = [Object.assign({ local: true, url: "", url6: "" }, data.node)];
-        }
         state.pageFamily = ipFamilyOf(data.ip) || data.ipVersion || "";
         // 打开页面这次连接的信息先落到它自己的协议上
         if (state.pageFamily) {
@@ -666,11 +805,19 @@
 
   // 后台上传的自定义图标：替换首页 logo 里的 SVG 圆环，并同步 favicon。
   // 服务端已在首屏注入 favicon，这里再补一次 logo，保证 settings 到达后一致。
-  function applySiteIcon(url) {
+  function applySiteIcon(url, hide) {
     var logo = document.querySelector(".logo");
     if (!logo) return;
     var img = document.getElementById("logoIcon");
-    var svg = logo.querySelector(".logo-mark");
+    // 只找默认的 <svg>：服务端已把自定义图标渲染成 <img class="logo-mark">，
+    // 若这里用 ".logo-mark" 匹配会选中那个 img，反而把它自己隐藏掉。
+    var svg = logo.querySelector("svg.logo-mark");
+    if (hide) {
+      // 后台勾了「不显示图标」：图标（含默认圆环）一律不显示，只留文字
+      if (img) img.remove();
+      if (svg) svg.remove();
+      return;
+    }
     if (url) {
       if (!img) {
         img = document.createElement("img");
@@ -693,7 +840,7 @@
     var suffix = (s.titleSuffix || "").trim() || t("titleSuffixDefault");
     document.title = t("pageTitle", { site: s.siteName, suffix: suffix });
     els.siteName.textContent = s.siteName;
-    applySiteIcon(s.iconUrl || "");
+    applySiteIcon(s.iconUrl || "", !!s.hideLogoIcon);
     gaugeMax = 1000;
     els.foot.textContent = s.footerNote || "";
     els.foot.hidden = !s.footerNote;
@@ -812,7 +959,7 @@
       if (!n) return;
       var u = fam === "v6" ? n.url6 : n.url;
       if (!u) return;
-      u = u.trim();
+      u = secureURL(u);
       // 裸地址（未带协议）按页面端口补全；带端口的节点原样使用
       if (!/^https?:\/\//i.test(u)) u = originOf(hostOf(u));
       push(u);
@@ -895,13 +1042,13 @@
     if (sel && window.PREFS) sel.value = PREFS.get("date");
   }
 
-  // 面板底部的示例行：四个选项的效果立刻可见（时间/日期、速度、距离）
+  // 面板底部的示例行：时间/日期/速度的效果立刻可见
   function prefPreview() {
     if (!window.PREFS) return "";
     return t("spPreview") + PREFS.sampleText();
   }
 
-  // 改动设置后立刻重绘：单位标签、表盘读数、最近一次成绩、节点距离与示例行
+  // 改动设置后立刻重绘：单位标签、表盘读数、最近一次成绩与示例行
   function applyPrefs() {
     var unit = speedUnit();
     var labels = document.querySelectorAll(".mt-unit");
@@ -945,10 +1092,9 @@
       var addr = n ? (nodeURL(n) || n.url || n.url6 || "") : "";
       var loc = n
         ? ((n.location || "").trim() ||
-          (!state.isAdmin ? "" : (n.local && !addr ? t("thisServer") : hostOf(addr))))
+          (!state.isAdmin ? "" : hostOf(addr)))
         : "";
-      var dist = nodeDistText(n);
-      els.spNodeLoc.textContent = dist ? (loc ? loc + " · " + dist : dist) : loc;
+      els.spNodeLoc.textContent = loc;
     }
     if (els.spNodeProto) {
       els.spNodeProto.textContent = t("protocol") + " · " + (state.family === "v6" ? "IPv6" : "IPv4");
@@ -974,7 +1120,7 @@
       if (!n) return;
       if ((n.url || "").trim()) f.v4 = true;
       if ((n.url6 || "").trim()) f.v6 = true;
-      if (n.local && !(n.url || "").trim() && !(n.url6 || "").trim()) { f.v4 = true; f.v6 = true; }
+      // 主控不再自带节点：地址留空的节点不参与任何协议
     });
     return f;
   }
@@ -983,9 +1129,17 @@
     var f = familySupport();
     if (!f.v6) state.family = "v4";
     else if (!f.v4) state.family = "v6";
-    if (els.protoBlock) els.protoBlock.hidden = !(f.v4 && f.v6);
+    // 主页和设置面板各有一处协议切换：两处都常显，
+    // 只有一侧有节点时把没节点的那颗按钮置灰（不是整块藏起来）
+    Array.prototype.forEach.call(document.querySelectorAll(".proto-block"), function (el) {
+      el.hidden = false;
+    });
     document.querySelectorAll(".proto-opt").forEach(function (b) {
-      b.classList.toggle("active", b.getAttribute("data-family") === state.family);
+      var fam = b.getAttribute("data-family") === "v6" ? "v6" : "v4";
+      var ok = !!f[fam];
+      b.classList.toggle("off", !ok);
+      b.disabled = !ok;
+      b.classList.toggle("active", fam === state.family);
     });
   }
 
@@ -1031,7 +1185,7 @@
     var addr = nodeURL(n) || n.url || n.url6 || "";
     // 没填地区时下一步会退到显示地址 —— 这一层也只对管理员开放
     var loc = (n.location || "").trim();
-    if (!loc && state.isAdmin) loc = n.local && !addr ? t("thisServer") : hostOf(addr);
+    if (!loc && state.isAdmin) loc = hostOf(addr);
     els.serverName.textContent = title;
     // 悬浮提示里也别带节点地址，只有管理员能看到
     els.serverName.title = state.isAdmin
@@ -1069,7 +1223,7 @@
       node = pick(state.family === "v6" ? st.defaultNode6 : st.defaultNode) ||
         pick(state.family === "v6" ? st.defaultNode : st.defaultNode6);
     }
-    if (!node) node = pool.filter(function (n) { return n.local; })[0] || pool[0] || null;
+    if (!node) node = pool[0] || null;
     state.node = node || null;
     state.base = node ? baseOf(node) : "";
     renderServer();
@@ -1481,6 +1635,8 @@
   function setRunning(on) {
     state.running = on;
     els.dial.classList.toggle("testing", on);
+    // 测速中只留表盘和关键数据：工具栏、连接方式、页脚说明都收起来
+    document.body.classList.toggle("testing", on);
   }
 
   async function runTest() {
@@ -1523,6 +1679,8 @@
       var stopDlLat = probeLatency(state.base, function (ms) {
         els.pgDownLat.textContent = fmtPing(ms);
       });
+      // 下载一开始就把进度条交给时间推进（12% → 55%），不再是等阶段结束才跳
+      rampProgress(55, (s.downloadSeconds || 15) * 1000);
       var dlRun = await measureDownload(state.base, s.downloadSeconds, dlMeter.tick);
       stopDlLat();
       // 下载占满连接时排队的小请求要等阶段结束才回来，这里再补测几次
@@ -1542,7 +1700,7 @@
       setDial("0.00", speedUnit(), "", true);
       // 进入上传阶段：表盘与顶部图标切成上传色
       els.dial.classList.add("up");
-      setStops("gaugeGrad", state.mode === "single" ? UP_GAUGE_COLORS.single : UP_GAUGE_COLORS.multi);
+      setArcRamp(state.mode === "single" ? "singleUp" : "multiUp");
       if (els.mtUpItem) els.mtUpItem.classList.add("live");
       var ulMeter = makeMeter(gaugeMax);
       setGauge(0, ulMeter.max());
@@ -1550,6 +1708,8 @@
       var stopUlLat = probeLatency(state.base, function (ms) {
         els.pgUpLat.textContent = fmtPing(ms);
       });
+      // 上传同样实时推进（55% → 92%）
+      rampProgress(92, (s.uploadSeconds || 15) * 1000);
       var ulRun = await measureUpload(state.base, s.uploadSeconds, ulMeter.tick, dl > 300 ? 4 << 20 : 1 << 20);
       stopUlLat();
       var ulLat = await measureLoadedLatency(state.base, 3);
@@ -1563,13 +1723,13 @@
 
       setRunning(false);
       els.dial.classList.remove("up");
-      setStops("gaugeGrad", state.mode === "single" ? GAUGE_COLORS.single : GAUGE_COLORS.multi);
+      setArcRamp(state.mode === "single" ? "singleDown" : "multiDown");
       buildTicks(gaugeMax);
       setGauge(dl, gaugeMax);
       setDial(fmtSpeed(dl), speedUnit(), "", true);
-      setCardProgress(100);
+      rampProgress(100, 500);   // 收尾也走一小段，避免最后一格"啪"地跳满
       showResult(ping, dl, ul);
-      reportResult(ping, dl, ul, dlBytes, ulBytes, buildTimeline(ping, dlRun.samples, ulRun.samples));
+      reportResult(ping, dl, ul, dlBytes, ulBytes, buildTimeline(ping, dlRun.samples, ulRun.samples), dlLat, ulLat);
     } catch (e) {
       setRunning(false);
       spin(false);
@@ -1583,7 +1743,7 @@
     els.pgPing.textContent = fmtPing(ping.ping);
     els.mtDown.textContent = fmtSpeed(down);
     els.mtUp.textContent = fmtSpeed(up);
-    renderExp(down, up, ping.ping);
+    renderExp(ping.ping, ping.jitter);
     state.lastResult = { ping: ping, down: down, up: up };
   }
 
@@ -1729,7 +1889,7 @@
     try { localStorage.setItem("st_rc", JSON.stringify(map)); } catch (e) {}
   }
 
-  function reportResult(ping, down, up, downBytes, upBytes, timeline) {
+  function reportResult(ping, down, up, downBytes, upBytes, timeline, downLat, upLat) {
     // 页面可能是用另一种协议打开的（例如走 IPv6 访问却选了 IPv4 节点），
     // 服务端从连接上只能看到那条协议的地址，所以把前端按所选协议探到的地址一并发过去。
     var me = clientOf(state.family);
@@ -1744,6 +1904,8 @@
         download: down,
         upload: up,
         loss: ping.loss || 0,
+        downLat: downLat || 0,
+        upLat: upLat || 0,
         isp: state.isp || "",
         ispEn: state.ispEn || "",
         ipVersion: state.family,
@@ -1771,7 +1933,7 @@
         els.resultId.textContent = d.id;
         els.openResult.href = resultPath(d.id);
         els.resultBar.hidden = false;
-        // 与 speedtest 一致：测完自动进结果页，留一点时间看最终数值
+        // 测完自动进结果页，留一点时间看最终数值
         clearTimeout(state.jumpTimer);
         state.jumpTimer = setTimeout(function () {
           if (state.running || state.resultId !== d.id) return;
@@ -1852,8 +2014,6 @@
       // 节点地址只给管理员看，普通访客只看到地区与名称
       var bits = [n.location, n.name];
       if (state.isAdmin) bits.push(nodeURL(n) || t("thisServer"));
-      var nd = nodeDistText(n);
-      if (nd) bits.push(nd);
       meta.textContent = bits.filter(Boolean).join(" · ");
       main.appendChild(name);
       main.appendChild(meta);

@@ -1,6 +1,6 @@
 /* 展示偏好：时间制式 / 日期格式 / 距离单位 / 速度单位
  *
- * 默认值与原版 speedtest.net 的出厂设置一致：
+ * 默认值：
  *   时间 12 小时制 · 日期 MM/DD/YYYY · 距离英里 · 速度 Mbps
  * 存在 localStorage 里，主页与报告页的「设置」面板改写，两处读同一份配置，
  * 所以改完立刻在报告页的测速时间、速度数字、节点距离上生效。
@@ -124,8 +124,7 @@
     sampleText: function () {
       var d = new Date(2026, 10, 18, 13, 24, 5);
       return fmtDate(d) + " " + fmtTime(Math.floor(d.getTime() / 1000), false) +
-        " · " + speedText(54.28) + " " + speedUnit() +
-        " · " + distText(20);
+        " · " + speedText(54.28) + " " + speedUnit();
     },
     defaults: DEF
   };

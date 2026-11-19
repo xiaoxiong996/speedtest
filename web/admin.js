@@ -44,10 +44,20 @@
     $("logoutBtn").hidden = true;
   }
 
+  // 默认密码提醒：mustChange 为 true 时常驻顶部横幅，改完密码自动消失
+  function checkPwdWarn() {
+    var box = $("pwdWarn");
+    if (!box) return;
+    api("/api/admin/me").then(function (d) {
+      box.hidden = !d.mustChange;
+    }).catch(function () {});
+  }
+
   function showApp() {
     $("loginView").hidden = true;
     $("appView").hidden = false;
     $("logoutBtn").hidden = false;
+    checkPwdWarn();
     loadOverview();
     loadNodes();
   }
@@ -74,6 +84,13 @@
 
   $("logoutBtn").addEventListener("click", function () {
     api("/api/admin/logout", { method: "POST" }).then(showLogin).catch(showLogin);
+  });
+
+  $("pwdWarn").addEventListener("click", function () {
+    var tab = document.querySelector('.tab[data-tab="account"]');
+    if (tab) tab.click();
+    var el = $("accOld");
+    if (el) el.focus();
   });
 
   /* ---------- 标签页 ---------- */
@@ -348,6 +365,34 @@
     });
   });
 
+  // 访客地址解析检测：把源站看到的转发头原样列出来，换 CDN 时对着看就行
+  if ($("btnIpDebug")) {
+    $("btnIpDebug").addEventListener("click", function () {
+      var out = $("ipDebugOut");
+      out.hidden = false;
+      out.textContent = "检测中…";
+      api("/api/admin/ipdebug").then(function (d) {
+        var lines = [];
+        lines.push("解析结果：" + (d.resolved || "（空）") + (d.resolvedFamily ? "  [" + d.resolvedFamily + "]" : ""));
+        lines.push("连接来源：" + (d.remoteAddr || "") +
+          "  可信代理=" + (d.remoteTrusted ? "是" : "否") +
+          "  公网=" + (d.remotePublic ? "是" : "否"));
+        lines.push("信任的头：" + (d.trustedHeaders || []).join(", "));
+        lines.push("本次收到的头：");
+        var h = d.clientHeaders || {};
+        var keys = Object.keys(h);
+        if (!keys.length) lines.push("  （一个都没有）");
+        keys.forEach(function (k) { lines.push("  " + k + ": " + h[k]); });
+        lines.push("");
+        lines.push("若「解析结果」不是你的真实地址，说明 CDN 回源没带对应的头，");
+        lines.push("或者源站前面还有一层反代把 X-Real-IP / X-Forwarded-For 覆盖了。");
+        out.textContent = lines.join("\n");
+      }).catch(function (e) {
+        out.textContent = "检测失败：" + e.message;
+      });
+    });
+  }
+
   function probe(node) {
     var list = [];
     if (node.url) list.push({ label: "IPv4", url: node.url });
@@ -378,6 +423,47 @@
 
   /* ---------- 站点设置 ---------- */
 
+  // 评级门槛默认值，与后端 defaultRating() / 前台 RATING_DEF 保持一致
+  var RATING_DEF = {
+    jitterWeight: 2,
+    web: [40, 80, 150, 300],
+    game: [30, 60, 100, 180],
+    video: [50, 100, 180, 320],
+    call: [40, 80, 140, 240],
+    loss: [0.1, 0.5, 1.5, 4]
+  };
+  var RATE_KEYS = ["Web", "Game", "Video", "Call", "Loss"];
+
+  function fillRating(rt) {
+    rt = rt || {};
+    if ($("setRateJitter")) {
+      $("setRateJitter").value = rt.jitterWeight != null ? rt.jitterWeight : RATING_DEF.jitterWeight;
+    }
+    RATE_KEYS.forEach(function (k) {
+      var def = RATING_DEF[k.toLowerCase()];
+      var arr = rt[k.toLowerCase()] || def;
+      for (var i = 0; i < 4; i++) {
+        var el = $("setRate" + k + i);
+        if (el) el.value = arr[i] != null ? arr[i] : def[i];
+      }
+    });
+  }
+
+  function readRating() {
+    var out = { jitterWeight: parseFloat($("setRateJitter") ? $("setRateJitter").value : "") };
+    if (!isFinite(out.jitterWeight) || out.jitterWeight < 0) out.jitterWeight = RATING_DEF.jitterWeight;
+    RATE_KEYS.forEach(function (k) {
+      var arr = [];
+      for (var i = 0; i < 4; i++) {
+        var el = $("setRate" + k + i);
+        var v = el ? parseFloat(el.value) : NaN;
+        arr.push(isFinite(v) && v >= 0 ? v : RATING_DEF[k.toLowerCase()][i]);
+      }
+      out[k.toLowerCase()] = arr;
+    });
+    return out;
+  }
+
   function fillSettings(s) {
     if (!s) return;
     $("setSiteName").value = s.siteName || "";
@@ -387,6 +473,7 @@
     $("setDl").value = s.downloadSeconds || 15;
     $("setUl").value = s.uploadSeconds || 15;
     $("setGauge").value = s.gaugeMax || 1000;
+    fillRating(s.rating || s.ratingCfg);
     $("setAllowSelect").checked = !!s.allowNodeSelect;
     $("setAutoPick").checked = s.autoSelectNode !== false;
     $("setShowIP").checked = !!s.showClientIP;
@@ -403,6 +490,7 @@
       $("adminPathNow").textContent = "/" + (s.adminPath || "");
     }
     $("headSite").textContent = s.siteName || "SpeedTest";
+    if ($("setHideIcon")) $("setHideIcon").checked = !!s.hideLogoIcon;
     var prev = $("iconPreview");
     if (prev) prev.src = s.iconUrl || "/favicon.svg";
     fillDefaultNodeSelect();
@@ -421,7 +509,9 @@
       downloadSeconds: parseInt($("setDl").value, 10) || 15,
       uploadSeconds: parseInt($("setUl").value, 10) || 15,
       gaugeMax: parseInt($("setGauge").value, 10) || 1000,
+      rating: readRating(),
       allowNodeSelect: $("setAllowSelect").checked,
+      hideLogoIcon: $("setHideIcon") ? $("setHideIcon").checked : false,
       autoSelectNode: $("setAutoPick").checked,
       showClientIP: $("setShowIP").checked,
       collectResults: $("setCollect").checked,
@@ -458,8 +548,23 @@
     if (state.settings) {
       state.settings.iconUrl = url || "";
       // 同步后台顶部品牌图标
-      var brand = document.querySelector(".a-brand img");
-      if (brand) brand.src = prev ? prev.src : "/favicon.svg";
+      // 后台上传/重置后立刻同步品牌区：有图标就换成 img，没有就还原默认圆环
+      var brandImg = document.querySelector(".a-brand img");
+      var brandSvg = document.querySelector(".a-brand svg");
+      if (url) {
+        if (!brandImg) {
+          brandImg = document.createElement("img");
+          brandImg.className = "a-brand-icon";
+          brandImg.alt = "";
+          var host = document.querySelector(".a-brand");
+          if (host) host.insertBefore(brandImg, host.firstChild);
+        }
+        brandImg.src = url;
+        if (brandSvg) brandSvg.style.display = "none";
+      } else {
+        if (brandImg) brandImg.remove();
+        if (brandSvg) brandSvg.style.display = "";
+      }
     }
   }
 
@@ -512,6 +617,7 @@
       $("accNew").value = "";
       $("accNew2").value = "";
       toast("账号密码已更新");
+      $("pwdWarn").hidden = true;
       loadOverview();
     }).catch(function (err) {
       $("accErr").textContent = err.message;

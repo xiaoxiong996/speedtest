@@ -52,6 +52,8 @@ a { color: inherit; }
 }
 
 .a-brand svg { width: 24px; height: 24px; }
+/* 自定义站点图标注入到后台品牌区时的尺寸，与默认 svg 对齐 */
+.a-brand img.a-brand-icon { width: 24px; height: 24px; object-fit: contain; border-radius: 5px; }
 
 /* 站点图标上传 */
 .icon-picker { display: flex; align-items: flex-start; gap: 14px; margin-top: 6px; }
@@ -154,6 +156,23 @@ input:focus, select:focus, textarea:focus {
 }
 
 select option { background: #0c1a29; }
+
+/* 评级门槛：一列指标名 + 4 个阈值输入 */
+.rate-grid {
+  display: grid;
+  grid-template-columns: 64px repeat(4, minmax(0, 1fr));
+  gap: 6px 10px;
+  align-items: center;
+  max-width: 560px;
+  margin-bottom: 6px;
+}
+.rate-grid > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.rate-head { margin: 12px 0 2px; }
+.rate-head > span { font-size: 12px; color: var(--muted-2); }
+.rate-grid input[type="number"] { width: 100%; padding: 7px 9px; font-size: 13px; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 18px; }
@@ -408,6 +427,8 @@ table.tbl tr.clickable { cursor: pointer; }
 
 @media (max-width: 760px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .rate-grid { grid-template-columns: 46px repeat(4, minmax(0, 1fr)); gap: 6px 6px; }
+  .rate-grid input[type="number"] { padding: 6px 5px; font-size: 12px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   table.tbl th:nth-child(4), table.tbl td:nth-child(4) { display: none; }
 }

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>节点面板</title>
+<style>
+:root{
+  --bg:#0b1520;--panel:#111e2b;--line:#1e3144;--text:#e6f0fa;--dim:#8aa4bd;
+  --cyan:#2ec5ff;--ok:#3ddc84;--warn:#ffb648;--err:#ff6b7b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:18px;margin:0 0 4px}
+.sub{color:var(--dim);font-size:12px;margin-bottom:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.card h2::before{content:"";width:3px;height:14px;background:var(--cyan);border-radius:2px}
+label{display:block;margin:12px 0 6px;font-size:12px;color:var(--dim)}
+input,textarea{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--line);
+  background:#0a1622;color:var(--text);font-size:13px;font-family:inherit}
+input:focus,textarea:focus{outline:none;border-color:var(--cyan)}
+textarea{min-height:60px;resize:vertical;font-family:ui-monospace,Consolas,monospace}
+button{padding:10px 18px;border-radius:8px;border:none;background:var(--cyan);
+  color:#04121c;font-size:13px;font-weight:600;cursor:pointer;margin-top:14px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>*{flex:1;min-width:200px}
+.msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:12.5px;display:none}
+.msg.show{display:block}
+.msg.ok{background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3);color:var(--ok)}
+.msg.err{background:rgba(255,107,123,.1);border:1px solid rgba(255,107,123,.3);color:var(--err)}
+.msg.info{background:rgba(46,197,255,.08);border:1px solid rgba(46,197,255,.25);color:var(--cyan)}
+.msg.warn{background:rgba(255,182,72,.1);border:1px solid rgba(255,182,72,.32);color:var(--warn)}
+.txt{background:#0a1622;border:1px dashed var(--cyan);border-radius:8px;padding:14px;
+  margin-top:12px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
+  word-break:break-all;position:relative}
+.txt b{color:var(--dim);font-weight:400;display:block;margin-bottom:4px;font-family:inherit}
+.cp{position:absolute;right:10px;top:10px;padding:4px 10px;font-size:11px;margin:0;
+  background:rgba(46,197,255,.15);color:var(--cyan);border:1px solid rgba(46,197,255,.35)}
+.hide{display:none!important}
+button.danger{border-color:rgba(255,107,123,.5);color:var(--err);margin-top:0}
+button.danger:hover{background:rgba(255,107,123,.1)}
+.ddns-row{display:grid;grid-template-columns:1fr 70px 1fr 1fr 28px;gap:8px;align-items:center;
+  padding:9px 11px;background:#0a1622;border:1px solid var(--line);border-radius:8px;margin-bottom:7px;font-size:12px}
+.ddns-row b{font-weight:600}
+.ddns-row .st{font-size:11px;padding:1px 7px;border-radius:20px;display:inline-block}
+.st.ok{background:rgba(61,220,132,.15);color:var(--ok)}
+.st.updated{background:rgba(46,197,255,.15);color:var(--cyan)}
+.st.error{background:rgba(255,107,123,.15);color:var(--err)}
+.st.pending{background:rgba(255,182,72,.15);color:var(--warn)}
+.ddns-row .ip{color:var(--dim);font-family:ui-monospace,Consolas,monospace;font-size:11px;word-break:break-all}
+.ddns-del{background:transparent;border:none;color:var(--dim);cursor:pointer;font-size:15px;padding:0;margin:0}
+.ddns-del:hover{color:var(--err)}
+.cert-item{background:#0a1622;border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:9px}
+.ci-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:5px}
+.ci-head b{font-size:13px;word-break:break-all}
+.ci-meta{font-size:11.5px;color:var(--dim)}
+.ci-sub{font-size:11px;color:var(--dim);margin-top:4px;word-break:break-all}
+.cn-sub{font-size:11px;color:var(--dim);margin-top:3px;word-break:break-all}
+.ci-del{margin-top:9px;padding:5px 12px;font-size:11px}
+.mode-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.mode-item{background:#0a1622;border:1px solid var(--line);border-radius:9px;padding:11px 13px;
+  cursor:pointer;transition:border-color .18s,background .18s,transform .12s}
+.mode-item:hover{border-color:#2f4f6e;transform:translateY(-1px)}
+.mode-item:active{transform:translateY(0)}
+.mode-item b::after{content:" 点击切换";font-size:10px;font-weight:400;color:var(--dim);opacity:.65}
+.mode-item b{display:block;font-size:12.5px;margin-bottom:3px}
+.mode-item span{font-size:11.5px;color:var(--dim);line-height:1.5}
+.mode-item.on{border-color:var(--cyan);background:rgba(46,197,255,.07)}
+.mode-item.on b{color:var(--cyan)}
+.cert-now{background:#0a1622;border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;margin-bottom:14px}
+.cn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px}
+.cn-row span{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+.cn-row b{font-size:13px;font-weight:600;word-break:break-all}
+.cn-bar{height:4px;background:#16283a;border-radius:3px;margin-top:12px;overflow:hidden}
+.cn-bar i{display:block;height:100%;width:0;border-radius:3px;
+  background:linear-gradient(90deg,#3ddc84,#2ec5ff);transition:width .4s}
+.cn-bar i.warn{background:linear-gradient(90deg,#ffb648,#ff886a)}
+.cn-tip{margin-top:8px;font-size:11.5px;color:var(--dim)}
+.login{max-width:340px;margin:80px auto}
+.step{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim);margin:16px 0}
+.step i{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11px}
+.step.on i{background:var(--cyan);border-color:var(--cyan);color:#04121c;font-weight:700}
+.step.on{color:var(--text)}
+code{background:#0a1622;padding:2px 6px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <!-- 登录 -->
+  <div id="loginBox" class="login hide">
+    <h1>节点面板</h1>
+    <div class="sub">仅限本机管理员</div>
+    <div class="card">
+      <label>账号</label><input id="lu" autocomplete="username">
+      <label>密码</label><input id="lp" type="password" autocomplete="current-password">
+      <div id="codeBox" class="hide">
+        <label>安装码（首次安装必填）</label>
+        <input id="lc" autocomplete="one-time-code" spellcheck="false" placeholder="8 位，见 docker logs">
+        <div class="msg show info" style="margin-top:8px">
+          首次安装的安全锁：运行 <code>docker logs 容器名 | grep 安装码</code> 查看。
+          登录成功后自动失效。
+        </div>
+      </div>
+      <button id="lbtn" style="width:100%">登录</button>
+      <div class="msg" id="lmsg"></div>
+    </div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="mainBox" class="hide">
+    <h1>节点面板</h1>
+    <div class="sub">证书签发 · 访问白名单 · <span id="ver"></span></div>
+
+    <!-- 证书：每张独立管理 -->
+    <div class="card">
+      <h2>证书（DNS-01，不需要 80/443）</h2>
+
+      <div id="certStatus" class="msg info show" style="margin-top:0">读取中…</div>
+
+      <div id="certListBox" style="margin-top:14px"></div>
+
+      <div class="mode-row">
+        <div class="mode-item" id="modeAuto">
+          <b>Cloudflare 自动</b>
+          <span>填 API Token，自动加 TXT、自动续期，全程无人值守</span>
+        </div>
+        <div class="mode-item" id="modeManual">
+          <b>手动添加</b>
+          <span>面板给出 TXT 记录，你自己去 DNS 后台添加</span>
+        </div>
+      </div>
+
+      <label>Cloudflare API Token（留空=手动模式）</label>
+      <input id="cfToken" type="password" placeholder="粘贴 Token，需要 Zone.DNS 编辑权限">
+      <div class="row" style="align-items:center">
+        <button id="cfSave" style="margin-top:10px">保存 Token</button>
+        <div id="cfHint" class="msg" style="margin-top:10px"></div>
+      </div>
+
+      <div class="step on" id="s1"><i>1</i><span>签发新证书</span></div>
+      <div class="row">
+        <div><label>域名（多个用英文逗号分隔，签在同一张证书里）</label>
+          <input id="domain" placeholder="node1.example.com,node1-v6.example.com"></div>
+      </div>
+      <button id="startBtn">开始签发</button>
+
+      <div id="txtBox" class="hide">
+        <div class="step on" id="s2"><i>2</i><span>到 DNS 服务商添加这条 TXT 记录</span></div>
+        <div class="txt">
+          <button class="cp" data-copy="txtName">复制</button>
+          <b>记录类型</b>TXT
+        </div>
+        <div class="txt">
+          <button class="cp" data-copy="txtName">复制</button>
+          <b>主机记录 / 名称</b><span id="txtName">-</span>
+        </div>
+        <div class="txt">
+          <button class="cp" data-copy="txtValue">复制</button>
+          <b>记录值</b><span id="txtValue">-</span>
+        </div>
+        <div class="msg info show" style="margin-top:12px">
+          Cloudflare 记得关闭小云朵（灰云）；阿里云/DNSPod 主机记录填
+          <code>_acme-challenge</code>。添加后等 1~3 分钟再继续。
+        </div>
+        <button id="verifyBtn">我已添加，继续验证并签发</button>
+      </div>
+    </div>
+
+    <!-- DDNS：v4 / v6 分开管理 -->
+    <div class="card">
+      <h2>DDNS 自动解析（动态 IP 必备）</h2>
+      <div class="msg info show">
+        定时检测本机公网 IP，和 Cloudflare 上的记录不一致就自动改。
+        IPv4 与 IPv6 各自独立管理，可以只开一个、也可以分别删改。
+      </div>
+
+      <div class="step on"><i>1</i><span>IPv4 记录（A）</span></div>
+      <div id="ddnsV4"></div>
+      <div class="row">
+        <div><label>添加 IPv4 域名</label><input id="ddnsDomain4" placeholder="speeda.example.com"></div>
+      </div>
+      <button id="ddnsAdd4">添加 A 记录</button>
+
+      <div class="step on" style="margin-top:22px"><i>2</i><span>IPv6 记录（AAAA）</span></div>
+      <div id="ddnsV6"></div>
+      <div class="row">
+        <div><label>添加 IPv6 域名</label><input id="ddnsDomain6" placeholder="speedb.example.com"></div>
+      </div>
+      <button id="ddnsAdd6">添加 AAAA 记录</button>
+
+      <div class="row" style="margin-top:18px">
+        <button class="ghost" id="ddnsRefresh">立即全部检查一次</button>
+      </div>
+      <div class="msg" id="ddnsMsg"></div>
+    </div>
+
+    <!-- 账号与入口 -->
+    <div class="card">
+      <h2>面板账号与入口</h2>
+      <div class="msg warn show" id="accWarn" style="margin-top:0;display:none">
+        你还在用安装时的默认密码，任何人都能进这个面板。请立刻修改。
+      </div>
+      <div class="msg info show" id="accNow" style="margin-top:0">读取中…</div>
+
+      <label>登录账号</label>
+      <input id="accUser" autocomplete="username" placeholder="admin">
+
+      <div class="row">
+        <div><label>当前密码（必填，用于验证身份）</label>
+          <input id="accCur" type="password" autocomplete="current-password"></div>
+      </div>
+      <div class="row">
+        <div><label>新密码（留空=不改，至少 8 位）</label>
+          <input id="accNew" type="password" autocomplete="new-password"></div>
+        <div><label>确认新密码</label>
+          <input id="accNew2" type="password" autocomplete="new-password"></div>
+      </div>
+
+      <label>面板入口路径（改完会重启，之后只能用新地址打开）</label>
+      <input id="accPath" placeholder="st-node-panel" autocomplete="off" spellcheck="false">
+
+      <button id="accSave">保存账号与入口</button>
+      <div class="msg" id="accMsg"></div>
+      <div class="msg show info" style="margin-top:12px">
+        改完写入 <code>certs/panel.json</code>，重启容器后仍然生效。
+      </div>
+    </div>
+
+    <!-- 白名单 -->
+    <div class="card">
+      <h2>访问限制</h2>
+      <label>允许的 Host（逗号分隔，留空=不限）</label>
+      <input id="allowHosts" placeholder="node1.example.com">
+      <label>允许的访客 IP 段（逗号分隔，留空=不限）</label>
+      <input id="allowCIDRs" placeholder="1.2.3.0/24,2001:db8::/32">
+      <label>允许跨源调用的主控站（逗号分隔，留空=任意）</label>
+      <input id="allowOrigins" placeholder="https://speed.example.com">
+      <button id="saveBtn">保存（立即生效）</button>
+      <div class="msg show info" style="margin-top:12px">
+        这里的修改会立即生效，并保存到 <code>certs/panel.json</code>，重启容器后仍然保留。
+      </div>
+      <div class="msg" id="svmsg"></div>
+    </div>
+
+    <div style="text-align:right"><button class="ghost" id="logoutBtn">退出登录</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var API = (function(){
+    // 面板挂在 /<path>/ 上，API 在 /api/panel/*
+    return "/api/panel";
+  })();
+
+  function $(id){ return document.getElementById(id); }
+  function show(el, on){ if(el) el.classList.toggle("hide", !on); }
+  function toast(el, text, kind){
+    if(!el) return;
+    el.className = "msg show " + (kind || "info");
+    el.textContent = text;
+  }
+
+  function api(path, opts){
+    opts = opts || {};
+    opts.credentials = "same-origin";
+    if (opts.body && typeof opts.body !== "string") {
+      opts.headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
+      opts.body = JSON.stringify(opts.body);
+    }
+    return fetch(API + path, opts).then(function(r){
+      return r.json().catch(function(){ return {ok:false, error:"响应不是 JSON"}; })
+        .then(function(d){ if(!r.ok) { d.ok = false; } return d; });
+    });
+  }
+
+  var state = { task: null, timer: 0 };
+
+  // 首次安装：登录页多一个「安装码」输入框
+  api("/setup").then(function(d){
+    if (d && d.required) show($("codeBox"), true);
+  }).catch(function(){});
+
+  /* ---------- 登录 ---------- */
+  function checkAuth(){
+    api("/state").then(function(d){
+      if(d && d.ok){ enter(d); } else { show($("loginBox"), true); }
+    }).catch(function(){ show($("loginBox"), true); });
+  }
+
+  function enter(d){
+    show($("loginBox"), false);
+    show($("mainBox"), true);
+    if (d.version) $("ver").textContent = "v" + d.version;
+    fillState(d.state || {});
+    renderCerts(d.certs, d.renewDays);
+    renderMode(d.cfTokenSet);
+    renderDDNS(d.ddns);
+    fillAccount(d.account);
+    if (d.task) applyTask(d.task);
+    startPoll();
+  }
+
+  /* ---------- 登录交互 ---------- */
+  $("lbtn").addEventListener("click", function(){
+    var b = this; b.disabled = true;
+    var user = $("lu").value.trim();
+    var pass = $("lp").value;
+    if (!user || !pass) {
+      toast($("lmsg"), "请填写账号和密码", "err");
+      b.disabled = false;
+      return;
+    }
+    api("/login", { method:"POST", body:{ user:user, pass:pass, code: ($("lc")||{}).value || "" } })
+      .then(function(d){
+        if (d.ok) { checkAuth(); }
+        else {
+          toast($("lmsg"), d.error || "登录失败", "err");
+          if (d.needSetup) show($("codeBox"), true);
+        }
+      })
+      .catch(function(e){ toast($("lmsg"), "请求失败：" + e, "err"); })
+      .then(function(){ b.disabled = false; });
+  });
+  $("lp").addEventListener("keydown", function(e){ if(e.key==="Enter") $("lbtn").click(); });
+  $("lu").addEventListener("keydown", function(e){ if(e.key==="Enter") $("lp").focus(); });
+
+  /* ---------- 证书任务（签发/续期进度） ---------- */
+  function applyTask(t){
+    state.task = t;
+    var st = t.stage || "idle";
+    var box = $("certStatus");
+
+    if (t.running) {
+      toast(box, t.message || "处理中…", "info");
+      $("startBtn").disabled = true;
+      $("verifyBtn").disabled = true;
+    } else if (st === "challenge" && t.txtValue) {
+      toast(box, t.message || "请添加 TXT 记录", "info");
+      $("startBtn").disabled = false;
+      $("verifyBtn").disabled = false;
+      show($("txtBox"), true);
+      $("txtName").textContent = t.txtName;
+      $("txtValue").textContent = t.txtValue;
+      if (t.domain) $("domain").value = t.domain;
+      if (t.auto) {
+        toast(box, "🔄 证书即将到期，已自动生成续期用的 TXT 记录，请替换 DNS 里旧的记录后点下方按钮", "warn");
+      }
+    } else if (st === "done") {
+      toast(box, "✅ " + (t.message || "证书已签发"), "ok");
+      $("startBtn").disabled = false;
+      $("verifyBtn").disabled = true;
+      show($("txtBox"), false);
+      // 签发前是 HTTP 模式的话，节点会重启切到 HTTPS，这里自动跳过去
+      if (location.protocol === "http:") {
+        setTimeout(function(){ location.href = location.href.replace(/^http:/, "https:"); }, 3000);
+      }
+    } else if (st === "error") {
+      toast(box, "❌ " + (t.error || "签发失败"), "err");
+      $("startBtn").disabled = false;
+      $("verifyBtn").disabled = false;
+    } else {
+      toast(box, "填写域名后点「开始签发」。已签好的证书列在上面，可单独删除。", "info");
+      $("startBtn").disabled = false;
+      $("verifyBtn").disabled = true;
+      show($("txtBox"), false);
+    }
+  }
+
+  function startPoll(){
+    if (state.timer) return;
+    state.timer = setInterval(function(){
+      api("/state").then(function(d){
+        if(!d || !d.ok) return;
+        if (d.task) applyTask(d.task);
+        renderCerts(d.certs, d.renewDays);
+        var busy = d.task && d.task.running;
+        if (!busy && d.task && (d.task.stage === "done" || d.task.stage === "error")) {
+          clearInterval(state.timer); state.timer = 0;
+        }
+      }).catch(function(){});
+    }, 3000);
+  }
+
+  $("startBtn").addEventListener("click", function(){
+    var domain = $("domain").value.trim();
+    if (!domain || domain.indexOf(".") < 0) { toast($("certStatus"), "请填写正确域名", "err"); return; }
+    var domains = domain.split(",").map(function(x){ return x.trim(); }).filter(Boolean);
+    show($("txtBox"), false);
+    this.disabled = true;
+    api("/cert/start", { method:"POST", body:{ domains: domains } })
+      .then(function(d){
+        if(!d.ok){ toast($("certStatus"), d.error || "启动失败", "err"); $("startBtn").disabled = false; return; }
+        toast($("certStatus"), d.auto ? "已开始，Cloudflare 自动添加 TXT 并校验…" : "已开始，正在获取 TXT 记录…", "info");
+        startPoll();
+      })
+      .catch(function(e){ toast($("certStatus"), String(e), "err"); $("startBtn").disabled = false; });
+  });
+
+  $("verifyBtn").addEventListener("click", function(){
+    toast($("certStatus"), "正在验证，DNS 传播可能要 1~3 分钟…", "info");
+    this.disabled = true;
+    api("/cert/verify", { method:"POST" })
+      .then(function(d){
+        if(!d.ok) toast($("certStatus"), d.error || "启动失败", "err");
+        startPoll();
+      });
+  });
+
+  /* 模式卡片可点击切换（之前只是展示，点了没反应） */
+  $("modeAuto").addEventListener("click", function(){
+    if ($("modeAuto").classList.contains("on")) {
+      toast($("cfHint"), "当前已经是 Cloudflare 自动模式，无需切换", "ok");
+      return;
+    }
+    // 切自动 = 需要 Token：把焦点送到输入框
+    $("cfToken").focus();
+    $("cfToken").scrollIntoView({ block:"center", behavior:"smooth" });
+    toast($("cfHint"), "粘贴 Cloudflare API Token 后点「保存 Token」，即切换为自动模式", "info");
+  });
+
+  $("modeManual").addEventListener("click", function(){
+    if ($("modeManual").classList.contains("on")) {
+      toast($("cfHint"), "当前已经是手动模式：签发/续期时会给你 TXT 记录，自己去 DNS 添加", "info");
+      return;
+    }
+    if (!confirm("切换到手动模式会清除已保存的 Cloudflare Token。\n\n之后每次签发与续期都需要你自己添加 TXT 记录。\n\n确定切换吗？")) return;
+    api("/cf", { method:"POST", body:{ token: "" } })
+      .then(function(d){
+        if (d.ok) { toast($("cfHint"), "已切换为手动模式", "ok"); checkAuth(); }
+        else toast($("cfHint"), d.error || "切换失败", "err");
+      });
+  });
+
+  function renderMode(auto){
+    $("modeAuto").classList.toggle("on", !!auto);
+    $("modeManual").classList.toggle("on", !auto);
+    if (auto) {
+      toast($("cfHint"), "已启用 Cloudflare 自动模式：签发与续期都不需要手动操作", "ok");
+    } else {
+      toast($("cfHint"), "当前是手动模式：每次签发/续期都需要你添加一次 TXT 记录", "info");
+    }
+  }
+
+  // 当前证书列表：每张一行，可单独删除
+  function renderCerts(certs, renewDays){
+    var box = $("certListBox");
+    if (!certs || !certs.length) {
+      box.innerHTML = '<div class="msg warn show" style="margin-top:0">还没有证书，节点当前以明文 HTTP 运行。填域名点「开始签发」。</div>';
+      return;
+    }
+    box.innerHTML = certs.map(function(c){
+      var days = c.daysLeft || 0;
+      var cls = days <= 0 ? "error" : (days <= (renewDays||30) ? "pending" : "ok");
+      var label = days <= 0 ? "已过期" : (days <= (renewDays||30) ? "待续期" : "正常");
+      var sans = (c.sans && c.sans.length > 1) ? ('<div class="cn-sub">含 ' + c.sans.join(", ") + '</div>') : '';
+      return '<div class="cert-item">'
+        + '<div class="ci-head"><b>' + c.domain + '</b><span class="st ' + cls + '">' + label + '</span></div>'
+        + '<div class="ci-meta">签发者 ' + (c.issuer||"-") + ' · 到期 ' + (c.notAfter||"-") + ' · 剩余 <b>' + days + '</b> 天</div>'
+        + sans
+        + '<div class="cn-bar"><i class="' + (days<=(renewDays||30)?'warn':'') + '" style="width:' + Math.max(2,Math.min(100,Math.round(days/90*100))) + '%"></i></div>'
+        + '<button class="ghost danger ci-del" data-dir="' + c.dir + '">删除这张</button>'
+        + '</div>';
+    }).join("");
+  }
+
+  function renderCert(c, renewDays){
+    // 兼容旧调用：单张证书也走列表渲染
+    if (c && c.state && c.state !== "none" && c.state !== "invalid") {
+      renderCerts([c], renewDays);
+    }
+  }
+
+  document.getElementById("certListBox").addEventListener("click", function(e){
+    var btn = e.target.closest ? e.target.closest(".ci-del") : null;
+    if (!btn) return;
+    var dir = btn.getAttribute("data-dir");
+    if (!confirm("确定删除 " + dir + " 这张证书？\n\n只影响这一张，其他证书照常工作。")) return;
+    btn.disabled = true;
+    api("/cert/delete", { method:"POST", body:{ dir: dir } }).then(function(d){
+      if (!d.ok) { toast($("certStatus"), d.error || "删除失败", "err"); btn.disabled = false; return; }
+      toast($("certStatus"), d.message || "已删除", "warn");
+      if (d.restart) {
+        setTimeout(function(){ location.href = location.href.replace(/^https:/, "http:"); }, 5000);
+      } else {
+        checkAuth();
+      }
+    });
+  });
+
+  /* ---------- DDNS：v4 / v6 分开 ---------- */
+  var ddnsAll = [];
+
+  function ddnsRow(e, i){
+    var st = e.state || "pending";
+    var label = {ok:"已一致", updated:"已更新", error:"出错", pending:"等待中"}[st] || st;
+    return '<div class="ddns-row">'
+      + '<b>' + e.domain + '</b>'
+      + '<span class="ip">本机 ' + (e.currentIp || "-") + '</span>'
+      + '<span class="ip">DNS ' + (e.dnsIp || "-") + '</span>'
+      + '<span class="st ' + st + '">' + label + '</span>'
+      + '<button class="ddns-del" data-i="' + i + '" title="删除">×</button>'
+      + '</div>'
+      + (e.message && st === "error" ? '<div class="ci-sub">' + e.message + '</div>' : '');
+  }
+
+  function renderDDNS(d){
+    if (!d) return;
+    ddnsAll = d.entries || [];
+    var v4 = "", v6 = "";
+    ddnsAll.forEach(function(e, i){
+      if (e.type === "AAAA") v6 += ddnsRow(e, i);
+      else v4 += ddnsRow(e, i);
+    });
+    var empty = '<div class="msg info show" style="margin:0 0 8px">还没有规则</div>';
+    $("ddnsV4").innerHTML = v4 || empty;
+    $("ddnsV6").innerHTML = v6 || empty;
+    $("ddnsMsg").className = "msg";
+  }
+
+  function loadDDNS(){ api("/ddns").then(function(d){ if (d.ok) renderDDNS(d.ddns); }); }
+
+  function saveDDNS(){
+    api("/ddns", { method:"POST", body:{ entries: ddnsAll.map(function(e){ return {domain:e.domain, type:e.type}; }) } })
+      .then(function(d){
+        if (d.ok) { toast($("ddnsMsg"), d.message || "已保存", "ok"); renderDDNS(d.ddns); setTimeout(loadDDNS, 4000); }
+        else toast($("ddnsMsg"), d.error || "保存失败", "err");
+      });
+  }
+
+  function addDDNS(inputId, type){
+    var dom = $(inputId).value.trim().toLowerCase();
+    if (!dom || dom.indexOf(".") < 0) { toast($("ddnsMsg"), "请填写正确域名", "err"); return; }
+    if (ddnsAll.some(function(e){ return e.domain === dom && e.type === type; })) {
+      toast($("ddnsMsg"), "这条规则已存在", "warn"); return;
+    }
+    ddnsAll.push({ domain: dom, type: type });
+    $(inputId).value = "";
+    saveDDNS();
+  }
+
+  $("ddnsAdd4").addEventListener("click", function(){ addDDNS("ddnsDomain4", "A"); });
+  $("ddnsAdd6").addEventListener("click", function(){ addDDNS("ddnsDomain6", "AAAA"); });
+  $("ddnsRefresh").addEventListener("click", function(){ saveDDNS(); });
+
+  ["ddnsV4","ddnsV6"].forEach(function(id){
+    document.getElementById(id).addEventListener("click", function(e){
+      var btn = e.target.closest ? e.target.closest(".ddns-del") : null;
+      if (!btn) return;
+      var i = parseInt(btn.getAttribute("data-i"), 10);
+      ddnsAll.splice(i, 1);
+      saveDDNS();
+    });
+  });
+
+  /* ---------- 账号与入口 ---------- */
+  function fillAccount(a){
+    a = a || {};
+    if ($("accUser") && !$("accUser").value) $("accUser").value = a.user || "";
+    if ($("accPath") && !$("accPath").value) $("accPath").value = (a.path || "").replace(/^\//, "");
+    if ($("accNow")) {
+      $("accNow").textContent = "当前入口 " + (a.path || "/-") + " · 账号 " + (a.user || "-");
+    }
+    if ($("accWarn")) $("accWarn").style.display = a.mustChange ? "" : "none";
+  }
+
+  $("accSave").addEventListener("click", function(){
+    var btn = this;
+    var cur = $("accCur").value;
+    var np = $("accNew").value;
+    var np2 = $("accNew2").value;
+    var path = $("accPath").value.trim();
+    if (!cur) { toast($("accMsg"), "请填写当前密码", "err"); return; }
+    if (np || np2) {
+      if (np.length < 8) { toast($("accMsg"), "新密码至少 8 位", "err"); return; }
+      if (np !== np2) { toast($("accMsg"), "两次输入的新密码不一致", "err"); return; }
+    }
+    var oldPath = ($("accNow").textContent.match(/\/\S+/) || [""])[0];
+    if (path && ("/" + path) !== oldPath) {
+      if (!confirm("入口将从 " + oldPath + " 改为 /" + path + "，保存后面板重启，之后只能用新地址打开。继续？")) return;
+    }
+    btn.disabled = true;
+    api("/account", { method:"POST", body:{
+      curPass: cur, user: $("accUser").value.trim(), newPass: np, path: path
+    }}).then(function(d){
+      if (!d.ok) { toast($("accMsg"), d.error || "保存失败", "err"); btn.disabled = false; return; }
+      toast($("accMsg"), d.message || "已保存", "ok");
+      $("accCur").value = ""; $("accNew").value = ""; $("accNew2").value = "";
+      if (d.restart && d.path) {
+        setTimeout(function(){
+          location.href = location.protocol + "//" + location.host + d.path;
+        }, 6000);
+      } else {
+        checkAuth();
+      }
+      btn.disabled = false;
+    }).catch(function(e){
+      toast($("accMsg"), "请求失败：" + e, "err");
+      btn.disabled = false;
+    });
+  });
+
+  /* ---------- 白名单 ---------- */
+  function fillState(s){
+    $("allowHosts").value = (s.allowHosts || []).join(",");
+    $("allowCIDRs").value = (s.allowCIDRs || []).join(",");
+    $("allowOrigins").value = (s.allowOrigins || []).join(",");
+  }
+  function parseList(v){
+    return (v || "").split(",").map(function(x){ return x.trim(); }).filter(Boolean);
+  }
+
+  $("saveBtn").addEventListener("click", function(){
+    api("/settings", { method:"POST", body:{
+      allowHosts: parseList($("allowHosts").value),
+      allowCIDRs: parseList($("allowCIDRs").value),
+      allowOrigins: parseList($("allowOrigins").value)
+    }}).then(function(d){
+      if(d.ok) toast($("svmsg"), "已保存并生效", "ok");
+      else toast($("svmsg"), d.error || "保存失败", "err");
+    });
+  });
+
+  $("cfSave").addEventListener("click", function(){
+    var btn = this; btn.disabled = true;
+    api("/cf", { method:"POST", body:{ token: $("cfToken").value.trim() } })
+      .then(function(d){
+        if(d.ok){ toast($("cfHint"), d.message || "已保存", "ok"); $("cfToken").value=""; checkAuth(); }
+        else toast($("cfHint"), d.error || "保存失败", "err");
+      })
+      .catch(function(e){ toast($("cfHint"), String(e), "err"); })
+      .then(function(){ btn.disabled = false; });
+  });
+
+  $("logoutBtn").addEventListener("click", function(){
+    api("/logout", { method:"POST" }).then(function(){
+      location.reload();
+    });
+  });
+
+  /* ---------- 复制 ---------- */
+  document.addEventListener("click", function(e){
+    var btn = e.target.closest ? e.target.closest(".cp") : null;
+    if(!btn) return;
+    var el = $(btn.getAttribute("data-copy"));
+    if(!el) return;
+    var text = el.textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+      .then(function(){ btn.textContent = "已复制"; setTimeout(function(){ btn.textContent="复制"; }, 1500); })
+      .catch(function(){
+        var r = document.createRange(); r.selectNode(el);
+        var s = getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.execCommand("copy");
+        btn.textContent = "已复制";
+      });
+  });
+
+  checkAuth();
+})();
+</script>
+</body>
+</html>

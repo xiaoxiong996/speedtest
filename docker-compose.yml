@@ -1,45 +1,115 @@
-# ===== 主控版（完整站点：web + 后台 + 测速）=====
-# 一键部署：docker compose up -d --build
-# 从 GitHub 拉取镜像部署：把 IMAGE 填成 ghcr.io/你的用户名/仓库名:版本，然后 docker compose up -d
+# ============================================================================
+#  主控版（完整站点：首页 + 后台 + 报告 + 测速节点管理）
+# ----------------------------------------------------------------------------
+#  一键启动：  docker compose up -d --build
+#  查看日志：  docker compose logs -f --tail=100
+#  重启：      docker compose restart
+#  升级：      docker compose build && docker compose up -d
+#
+#  网络模型（重要）：
+#    容器走【桥接网络】，只把端口发布到宿主机 127.0.0.1，
+#    外部一律经 Lucky / Nginx / CDN 反代进来，容器本身不直接对公网暴露。
+#    这样既保留 docker 的网络隔离，又不会让明文的 3333 端口裸奔在公网。
+#    访客真实 IP 由反代写进 X-Forwarded-For，容器只信任来自 docker 网关的转发头。
+# ============================================================================
 services:
   speedtest:
-    # image 与 build 同时写：本地 --build 时用源码构建；只 up -d 时若无本地镜像会尝试拉 image
-    image: "${IMAGE:-speedtest-site:1.2.48}"
+    # 镜像名：本地构建时用 1.4.0；从 GitHub 拉镜像部署时改 IMAGE=ghcr.io/用户名/仓库名:latest
+    image: "${IMAGE:-speedtest-site:1.4.0}"
     build:
       context: .
     container_name: speedtest
+    # 容器异常退出/宿主重启后自动拉起；手动 stop 的不会被拉起
     restart: unless-stopped
-    # 主控版默认 APP_MODE=controller；只监听本机回环，由反代转发，避免绕过反代直连明文端口
-    network_mode: host
+
+    # ------------------------------------------------------------------
+    # 端口发布：宿主 127.0.0.1:3333 → 容器 3333
+    #   BIND_ADDR 改成 0.0.0.0 就是"跳过反代直接对公网"，明文 http，不推荐；
+    #   想换宿主端口改 HOST_PORT（比如 8080），反代目标同步改。
+    # ------------------------------------------------------------------
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-3333}:${CONTAINER_PORT:-3333}"
+
+    # 固定一套桥接网络，网关地址写死成 172.31.240.1，
+    # 这样 TRUSTED_PROXIES 里能精确只信任"反代来的那一跳"，不用信任整个 172.16/12。
+    # 网络本身的定义在文件最下方的顶层 networks: 段里（服务里只声明用哪个网络）。
+    networks:
+      - default
+
     environment:
+      # -------- 运行模式：主控（有 web + 后台）。节点版是 node，别改错 --------
       APP_MODE: "controller"
+      # 数据目录：config.json / results.jsonl 都写这里，必须挂持久卷（见下面 volumes）
       DATA_DIR: /data
-      HTTP_HOST: "${HTTP_HOST:-127.0.0.1}"
-      HTTP_PORT: "${HOST_PORT:-3333}"
-      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1,::1}"
-      # 三家 CDN 专有头全信任，X-Real-IP 兜底；换 CDN 不用改这里
-      TRUSTED_IP_HEADERS: "${TRUSTED_IP_HEADERS:-CF-Connecting-IP,EO-Connecting-IP,Ali-Cdn-Real-Ip,X-Real-IP}"
+      # 桥接网络下容器必须监听 0.0.0.0，否则宿主机反代连不进来；
+      # 对外暴露面由上面 ports 的 BIND_ADDR 控制，安全上等价于"只监听回环"。
+      HTTP_HOST: "${HTTP_HOST:-0.0.0.0}"
+      HTTP_PORT: "${CONTAINER_PORT:-3333}"
+
+      # -------- 访客真实 IP 解析 --------
+      # 只有请求来源命中可信代理，才会采信下面的转发头（防伪造）。
+      # 桥接模式下来源是 docker 网关，所以这里要带上 172.31.240.1。
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1,::1,172.31.240.1}"
+      # 依次尝试的头部：Cloudflare / 阿里云CDN / 腾讯云EdgeOne / 通用反代 都有对应字段。
+      # 顺序有意义：XFF 放在 X-Real-IP 之前，因为 Lucky 会用 X-Real-IP 覆盖成上一跳。
+      TRUSTED_IP_HEADERS: "${TRUSTED_IP_HEADERS:-CF-Connecting-IP,True-Client-IP,Ali-Cdn-Real-Ip,Ali-Real-Ip,EO-Connecting-IP,X-Forwarded-For,X-Real-IP}"
+      # 站点对外地址（https://你的域名），用于生成分享链接/报告链接；留空自动取当前请求
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
+      # 后台登录 Cookie 的作用域。多个子域名指向同一个后台时（例如 speed.x.com 与
+      # speedtest.x.com），留空会让它们各存一份登录态，换域名访问就像"刷新掉登录"。
+      # 填 .x.com 即可共享；只有一个域名就留空。
+      ADMIN_COOKIE_DOMAIN: "${ADMIN_COOKIE_DOMAIN:-}"
+
+      # -------- 首次安装时的初始化参数（只在 data/config.json 还不存在时生效）--------
+      # 后台账号：账号建好以后，改密码请到后台改，密码只存 config.json 的哈希；
+      # 这里再留明文不会覆盖已存在的账号。
       ADMIN_USER: "${ADMIN_USER:-admin}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # 后台路径前缀：后台地址是 https://域名/<ADMIN_PATH>；留空自动生成随机串
       ADMIN_PATH: "${ADMIN_PATH:-}"
       SITE_NAME: "${SITE_NAME:-SpeedTest}"
       SITE_TITLE_SUFFIX: "${SITE_TITLE_SUFFIX:-}"
-      NODE_NAME: "${NODE_NAME:-本地节点}"
-      NODE_LOCATION: "${NODE_LOCATION:-中国}"
-      NODE_SPONSOR: "${NODE_SPONSOR:-自建机房}"
-      NODE_URL: "${NODE_URL:-}"
-      NODE_URL6: "${NODE_URL6:-}"
+      # 说明：主控不再自带测速节点（没有 NODE_URL 这类变量了）。
+      # 测速节点一律用节点版部署，然后在后台「节点」里添加/修改/排序。
+      # 1 = 每条请求的日志打印解析出的访客 IP（排查 CDN 取 IP 问题时临时打开）
       LOG_CLIENT_IP: "${LOG_CLIENT_IP:-0}"
-      TZ: Asia/Shanghai
+      TZ: "${TZ:-Asia/Shanghai}"
+
     volumes:
+      # 唯一需要持久化的目录：配置 + 报告历史。备份它就是备份整站数据。
       - ./data:/data
+
+    # 日志轮转：单文件 10MB、保留 3 个，防止把磁盘写满
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+    # 测速是高并发短连接，文件描述符上限放开；低于 65535 时多线会报 too many open files
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:${CONTAINER_PORT:-3333}/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+# ============================================================================
+#  桥接网络定义（顶层）：固定网段与网关，避免和宿主机上其它 docker 网络撞车，
+#  也让 TRUSTED_PROXIES 能写死一个确定的网关 IP。
+#  想换网段：在 .env 里设 DOCKER_SUBNET=172.29.0.0/24、DOCKER_GATEWAY=172.29.0.1，
+#  同时把 TRUSTED_PROXIES 改成同样的网关。
+# ============================================================================
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "${DOCKER_SUBNET:-172.31.240.0/24}"
+          gateway: "${DOCKER_GATEWAY:-172.31.240.1}"
+

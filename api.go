@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"io"
 	"log"
 	"math"
@@ -37,12 +38,8 @@ func (s *Server) apiRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleISP(w, r)
 	case path == "/servers" && r.Method == http.MethodGet:
 		s.handleServers(w, r)
-	case path == "/ping":
-		s.handlePing(w, r)
-	case path == "/download":
-		s.handleDownload(w, r)
-	case path == "/upload":
-		s.handleUpload(w, r)
+	// 注意：主控版不再自带测速节点，/ping、/download、/upload 不在这里注册。
+	// 测速流量一律走节点版（APP_MODE=node），主控只负责页面、后台与节点管理。
 	case path == "/report" && r.Method == http.MethodPost:
 		s.handleReport(w, r)
 	case strings.HasPrefix(path, "/result/") && strings.HasSuffix(path, "/rate") && r.Method == http.MethodPost:
@@ -68,6 +65,8 @@ func (s *Server) apiRouter(w http.ResponseWriter, r *http.Request) {
 		s.requireAuth(s.handleChangePassword)(w, r)
 	case path == "/admin/nodes/probe" && r.Method == http.MethodPost:
 		s.requireAuth(s.handleProbeNode)(w, r)
+	case path == "/admin/ipdebug" && r.Method == http.MethodGet:
+		s.requireAuth(s.handleIPDebug)(w, r)
 	case path == "/admin/nodes" && r.Method == http.MethodGet:
 		s.requireAuth(s.handleListNode)(w, r)
 	case path == "/admin/nodes" && r.Method == http.MethodPost:
@@ -93,6 +92,7 @@ func publicSettings(st Settings) map[string]any {
 		"siteName":        st.SiteName,
 		"tagline":         st.Tagline,
 		"iconUrl":         st.IconURL,
+		"hideLogoIcon":    st.HideLogoIcon,
 		"titleSuffix":     st.TitleSuffix,
 		"defaultNode":     st.DefaultNode,
 		"defaultNode6":    st.DefaultNode6,
@@ -106,6 +106,7 @@ func publicSettings(st Settings) map[string]any {
 		"footerNote":      st.FooterNote,
 		"probeV4":         st.ProbeV4,
 		"probeV6":         st.ProbeV6,
+		"ratingCfg":       st.Rating,
 		"routes":          effectiveRoutesMap(st),
 	}
 }
@@ -158,13 +159,6 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	noStore(w)
 	cfg := s.store.Get()
-	local := Node{}
-	for _, n := range cfg.Nodes {
-		if n.Local {
-			local = n
-			break
-		}
-	}
 	w.Header().Set("X-Speedtest-Node", "1")
 	ip := clientIP(r)
 	logClientIP(r, ip)
@@ -201,17 +195,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		// 本机地址：前台切换 IPv4 / IPv6 时用它补探访客在另一协议下的地址
 		"addrs":    map[string][]string{"v4": addrs4, "v6": addrs6},
 		"settings": publicSettings(cfg.Settings),
-		"node": map[string]any{
-			"id":       local.ID,
-			"name":     local.Name,
-			"sponsor":  local.Sponsor,
-			"location": local.Location,
-			"url":      local.URL,
-			"url6":     local.URL6,
-			"local":    true,
-			"lat":      local.Lat,
-			"lon":      local.Lon,
-		},
+		// servers 就是后台里配置的全部节点；主控自身不再是节点，没有 node 字段
 		"servers": publicNodes(cfg.Nodes),
 		"version": appVersion,
 	})
@@ -237,6 +221,36 @@ func (s *Server) handleISP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleIPDebug 返回「源站实际看到的转发信息」，用来核对 CDN 回源配置。
+// 换 CDN（Cloudflare / 阿里云 / 腾讯云 / EdgeOne）后打开它，就能看到
+// 是哪个头带回了访客地址、解析结果对不对，不用再去翻容器日志。
+func (s *Server) handleIPDebug(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	remote := normalizeIP(r.RemoteAddr)
+	names := []string{
+		"CF-Connecting-IP", "True-Client-IP", "Ali-Cdn-Real-Ip", "Ali-Real-Ip",
+		"EO-Connecting-IP", "X-Real-IP", "X-Forwarded-For", "Forwarded",
+		"X-Forwarded-Proto", "CDN-Src-Ip",
+	}
+	headers := map[string]string{}
+	for _, h := range names {
+		if v := strings.TrimSpace(r.Header.Get(h)); v != "" {
+			headers[h] = v
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":             true,
+		"resolved":       clientIP(r),
+		"resolvedFamily": ipFamily(clientIP(r)),
+		"remoteAddr":     r.RemoteAddr,
+		"remoteIP":       remote,
+		"remoteTrusted":  isTrustedProxy(remote),
+		"remotePublic":   isPublicIP(remote),
+		"trustedHeaders": trustedIPHeaders(),
+		"clientHeaders":  headers,
+	})
+}
+
 func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	noStore(w)
@@ -258,6 +272,9 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		Download    float64 `json:"download"`
 		Upload      float64 `json:"upload"`
 		Loss        float64 `json:"loss"`
+		// 带载延迟（下载 / 上传进行中测得的延迟）
+		DownLat     float64 `json:"downLat"`
+		UpLat       float64 `json:"upLat"`
 		Connections int     `json:"connections"`
 		ISP         string  `json:"isp"`
 		ISPEn       string  `json:"ispEn"`
@@ -366,6 +383,8 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		Download:      payload.Download,
 		Upload:        payload.Upload,
 		Loss:          payload.Loss,
+		DownLat:       clampNum(payload.DownLat, 60000),
+		UpLat:         clampNum(payload.UpLat, 60000),
 		Connections:   payload.Connections,
 		DownloadBytes: payload.DownloadBytes,
 		UploadBytes:   payload.UploadBytes,
@@ -400,25 +419,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := s.store.Get()
 	user := cfg.Admin
-	okUser := strings.TrimSpace(body.Username) == user.Username
 	got := hashPassword(body.Password, user.Salt, user.Iter)
-	if !okUser || got != user.Hash {
+	okUser := subtle.ConstantTimeCompare([]byte(strings.TrimSpace(body.Username)), []byte(user.Username)) == 1
+	okPass := subtle.ConstantTimeCompare([]byte(got), []byte(user.Hash)) == 1
+	if !okUser || !okPass {
 		s.limiter.fail(ip)
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "账号或密码不正确"})
 		return
 	}
 	s.limiter.reset(ip)
-	token := s.signSession(user.Username, 12*time.Hour)
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   12 * 3600,
+	// 30 天有效期 + 滑动续期（见 http_util.go），避免第二天刷新就掉登录
+	s.setSessionCookie(w, r, s.signSession(user.Username, sessionDuration))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "username": user.Username, "mustChange": user.MustChange,
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": user.Username})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -426,6 +440,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   adminCookieDomain(),
 		HttpOnly: true,
 		Secure:   isSecureRequest(r),
 		MaxAge:   -1,
@@ -436,9 +451,11 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	cfg := s.store.Get()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":       true,
-		"username": cfg.Admin.Username,
-		"version":  appVersion,
+		"ok":         true,
+		"username":   cfg.Admin.Username,
+		"version":    appVersion,
+		"mustChange": cfg.Admin.MustChange,
+		"adminPath":  normalizeAdminPath(cfg.Settings.AdminPath),
 	})
 }
 
@@ -518,6 +535,8 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	if st.GaugeMax > 100000 {
 		st.GaugeMax = 100000
 	}
+	// 评级门槛：缺字段/乱序/越界一律回落到默认值，避免前台按脏数据算档位。
+	normalizeRating(&st.Rating)
 	// 图标由专门的上传/重置接口管理，设置保存不动它（旧页面不会提交 iconUrl）。
 	st.IconURL = s.store.Get().Settings.IconURL
 	if err := s.store.Update(func(c *Config) error {
@@ -620,8 +639,12 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "参数错误"})
 		return
 	}
-	if len(body.NewPassword) < 6 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "新密码至少 6 位"})
+	if len(body.NewPassword) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "新密码至少 8 位"})
+		return
+	}
+	if body.NewPassword == defaultAdminPass {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "不要继续使用安装默认密码"})
 		return
 	}
 	cfg := s.store.Get()
@@ -642,16 +665,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	token := s.signSession(user, 12*time.Hour)
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   12 * 3600,
-	})
+	s.setSessionCookie(w, r, s.signSession(user, sessionDuration))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -831,6 +845,10 @@ func validateNode(p nodePayload) (Node, string) {
 	// 把误填进 IPv4 栏的 IPv6 地址挪到 IPv6 栏，避免前台选错协议
 	if n.URL != "" && n.URL6 == "" && nodeFamily(n.URL) == "v6" {
 		n.URL, n.URL6 = "", n.URL
+	}
+	// 主控不提供测速带宽，节点必须自带地址（否则测速请求无处可去）
+	if n.URL == "" && n.URL6 == "" {
+		return Node{}, "节点地址不能为空：请填写节点版的访问地址，例如 https://node1.example.com:8443"
 	}
 	return n, ""
 }
@@ -1054,6 +1072,10 @@ func publicResult(r Result, cfg Config) map[string]any {
 		"download":    r.Download,
 		"upload":      r.Upload,
 		"loss":        r.Loss,
+		"downLat":     r.DownLat,
+		"upLat":       r.UpLat,
+		// 体验评级门槛随报告下发，报告页据此算 5 档，和首页保持一致
+		"ratingCfg":   cfg.Settings.Rating,
 		"connections": r.Connections,
 		"rating":      r.Rating,
 		// 本次测速消耗的流量（字节）

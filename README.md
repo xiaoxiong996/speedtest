@@ -1,6 +1,6 @@
 # SpeedTest 自建测速站
 
-仿 speedtest.net 的极简测速页面 + 自建多节点，服务端为单文件 Go 程序（无第三方依赖），Docker 部署为 linux/amd64。
+仿 speedtest.net 的极简测速页面 + 自建多节点，服务端为单文件 Go 程序（无第三方依赖），Docker 部署，支持 linux/amd64 与 linux/arm64。
 
 ## 目录结构
 
@@ -10,7 +10,9 @@ web/                                                                       前�
 Dockerfile                                                                 镜像构建（主控/节点共用同一镜像）
 docker-compose.yml                                                         主控版编排（web + 后台 + 测速）
 docker-compose.node.yml                                                    纯测速节点版编排
+deploy/                                                                    一键安装/卸载脚本（主控 + 节点）与节点部署说明
 .env.example / .env.node.example                                           环境变量示例
+LICENSE                                                                    MIT
 data/                                                                      运行数据（config.json，自动生成）
 ```
 
@@ -27,9 +29,16 @@ data/                                                                      运�
 
 ## 上传 GitHub + 一键部署
 
-这套代码已配好 GitHub Actions：推送 `v*` 标签就自动构建镜像并推到你自己的 **GitHub Container Registry (ghcr.io)**，小鸡上只需一份 Compose 即可拉起，不用装 Go、不用本地构建。
+这套代码已配好 GitHub Actions：推 `main` 或打 `v*` 标签，自动构建**多架构镜像**（`linux/amd64` + `linux/arm64`）并推到你自己的 ghcr.io，同时自动创建 Release：
 
-步骤：
+| 用途 | 镜像 |
+|---|---|
+| 主控（网页 + 后台 + 报告） | `ghcr.io/<用户名>/<仓库名>:latest`（打 tag 时另有 `:1.4.0`） |
+| 测速节点 | `ghcr.io/<用户名>/<仓库名>-node:latest` |
+
+两者二进制完全相同，只是镜像名分开，Compose 里各写各的，避免拉错。
+
+### 第一次推到 GitHub
 
 ```bash
 # 1. 在 GitHub 新建一个空仓库（例如 speedtest）
@@ -40,22 +49,61 @@ git branch -M main
 git remote add origin https://github.com/你的用户名/你的仓库名.git
 git push -u origin main
 
-# 2. 打标签触发自动构建（ ghcr.io/你的用户名/你的仓库名:v1.2.48 与 :latest ）
-git tag v1.2.48 && git push origin v1.2.48
+# 2. 打标签：触发多架构构建 + 创建 Release
+git tag v1.4.0 && git push origin v1.4.0
 ```
 
-- 在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则推 ghcr.io 会没权限。
-- 镜像是**私有仓库**时，小鸡上先 `docker login ghcr.io -u 用户名`（密码用 GitHub 的 Personal Access Token，需 `read:packages` 权限）；公开仓库可跳过。
-- 若不想用 ghcr.io，也可以本地 `--build`，完全不依赖 GitHub Actions。
+- 仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则推 ghcr.io 会没权限。
+- 镜像是**私有包**时，服务器上先 `docker login ghcr.io -u 用户名`（密码用 GitHub 的 Personal Access Token，需 `read:packages` 权限）；公开仓库可跳过。
+- 不想用 Actions 也可以本地构建：`docker build -t speedtest-site:1.4.0 .`
 
-小鸡上一键部署（把 `你的用户名/你的仓库名` 换成实际值）：
+### 主控版 vs 节点版
+
+| 场景 | 用哪个 | 一键脚本 |
+|---|---|---|
+| 主站（网页 + 后台 + 报告 + 节点管理） | 主控版 | `deploy/install.sh` |
+| 只做测速转发的小鸡 | 节点版 | `deploy/install-node.sh` |
+
+主控一键安装（写 `/opt/speedtest/{docker-compose.yml,.env}`，建 `data/`，装完直接打印站点与后台地址）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/install.sh \
+  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>:1.4.0 --url https://speed.example.com
+
+# 卸载（默认保留 data/，加 --purge-data 才删配置与报告历史）
+curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/uninstall.sh \
+  | sudo bash -s -- --yes
+```
+
+交互式安装（一个参数都不给也行，会依次问域名、端口、后台路径、密码）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/install.sh -o install.sh
+sudo bash install.sh
+```
+
+默认值：安装目录 `/opt/speedtest`、宿主端口 `3333`（只绑 `127.0.0.1`，给反代用）、后台账号 `admin`、密码 `Speedtest@2026`、入口 `/st-panel`；**首次登录强制改密**，改完以 `data/config.json` 的哈希为准。全部参数见 `bash deploy/install.sh --help`。
+
+节点一键安装（详细参数见 `deploy/README-NODE.md`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/install-node.sh \
+  | sudo bash -s -- --image ghcr.io/<用户名>/<仓库>-node:1.4.0 --port 8443 \
+      --prefix /n1 --domain node.example.com --host node.example.com --origin https://speed.example.com
+
+# 卸载
+curl -fsSL https://raw.githubusercontent.com/<用户名>/<仓库>/main/deploy/uninstall-node.sh \
+  | sudo bash -s -- --yes
+```
+
+小鸡上手动部署（把 `你的用户名/你的仓库名` 换成实际值）：
 
 ```bash
 # 主控版
 mkdir -p /app/speed && cd /app/speed
-IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.48 docker compose up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名:1.4.0 docker compose up -d
 # 节点版
-IMAGE=ghcr.io/你的用户名/你的仓库名:1.2.48 docker compose -f docker-compose.node.yml up -d
+IMAGE=ghcr.io/你的用户名/你的仓库名-node:1.4.0 docker compose -f docker-compose.node.yml up -d
 ```
 
 本地无镜像时 `docker compose up -d` 会自动从 ghcr.io 拉取；`--build` 则用源码现构建。
@@ -146,19 +194,56 @@ location / {
 
 推荐在每台小鸡上用**节点版**部署——它只测速、无后台无页面、配置只能写死在 Compose 里，无法被外部改动。
 
-### 1. 在节点小鸡上部署
+### 1. 先把代码推到自己的 GitHub（只做一次）
 
 ```bash
-mkdir -p /app/speed-node && cd /app/speed-node
-# 只需两个文件：docker-compose.node.yml 与 .env.node.example（复制为 .env.node 后修改）
-cp .env.node.example .env.node
-# 编辑 .env.node，按需填白名单与端口
-docker compose --env-file .env.node -f docker-compose.node.yml up -d --build
+cd speedtest
+git init && git add -A && git commit -m "speedtest: controller + node"
+git remote add origin https://github.com/<你的用户名>/<仓库名>.git
+git branch -M main && git push -u origin main
+git tag v1.4.0 && git push origin v1.4.0       # 触发 Actions 构建镜像
 ```
 
-节点版默认监听 `0.0.0.0:8443`（.host 网络），可直接对外，也可由反代转发。容器只读、无数据卷，删掉重建也不丢任何配置——因为配置全在 `.env.node` 里。
+Actions 完成后镜像地址是 `ghcr.io/<你的用户名>/<仓库名>-node:1.4.0`（主控镜像是同名去掉 `-node`，`latest` 同步更新）。
+GHCR 默认私有：到 GitHub → Your packages → 该包 → Package settings 把可见性改成 **Public**，
+否则节点服务器要先 `docker login ghcr.io` 才能拉。
 
-### 2. 三道访问白名单（都在 `.env.node` 配置）
+### 2. 在节点小鸡上一键安装（推荐）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<你的用户名>/<仓库名>/main/deploy/install-node.sh \
+  | sudo bash -s -- \
+      --image ghcr.io/<你的用户名>/<仓库名>-node:1.4.0 \
+      --port 8443 \
+      --prefix /n1 \
+      --host node.example.com \
+      --origin https://speed.example.com
+```
+
+脚本会建 `/opt/speedtest-node`，写 `.env`（权限 600）、写 compose、拉镜像、启动并等健康检查通过，
+最后打印要填进主控后台的节点地址。改配置就编辑 `/opt/speedtest-node/.env` 再 `docker compose up -d`。
+
+卸载：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<你的用户名>/<仓库名>/main/deploy/uninstall-node.sh \
+  | sudo bash -s -- --yes            # 加 --purge-image 连镜像一起删
+```
+
+完整参数与排错见 [`deploy/README-NODE.md`](deploy/README-NODE.md)。
+
+### 3. 或者用仓库里的 Compose 手动部署
+
+```bash
+git clone https://github.com/<你的用户名>/<仓库名>.git && cd <仓库名>
+cp .env.node.example .env.node
+# 编辑 .env.node，按需填白名单与端口
+docker compose --env-file .env.node -f docker-compose.node.yml up -d
+```
+
+节点版默认监听 `0.0.0.0:8443`（host 网络），可直接对外，也可由反代转发。容器只读、无数据卷，删掉重建也不丢任何配置——因为配置全在 `.env.node` 里。
+
+### 4. 三道访问白名单（都在 `.env.node` 配置）
 
 | 变量 | 作用 | 留空 | 示例 |
 |---|---|---|---|
@@ -173,7 +258,7 @@ docker compose --env-file .env.node -f docker-compose.node.yml up -d --build
 > 设了 `NODE_ALLOW_HOSTS` 时，主控后台节点地址必须用该域名访问，直接用 IP 会被拒。
 > 若节点也经过 CDN/反代，如实配置 `TRUSTED_PROXIES` + `TRUSTED_IP_HEADERS`，否则 `NODE_ALLOW_CIDRS` 会拿到 CDN 节点 IP。
 
-### 3. 在主控后台添加节点
+### 5. 在主控后台添加节点
 
 主站后台「测速节点 → 添加节点」：
 
@@ -201,7 +286,7 @@ docker compose --env-file .env.node -f docker-compose.node.yml up -d --build
 
 - **概览**：节点数、运行时长、最近 300 条测速记录（内存保存）；每条记录可点击整行或右侧报告编号，
   直接打开对应的测速报告页（链接带语言与协议前缀）
-- **测速节点**：增删改、启用/停用、连通性测试；可选填纬度/经度，填了前台节点列表才显示访客到节点的距离
+- **测速节点**：增删改、启用/停用、连通性测试；经纬度仍可填，但前台节点列表**不再显示距离**
 - **站点设置**：站点名、默认节点（IPv4 / IPv6 各一个）、并发连接数、上下行时长、表盘量程、是否允许切换节点、是否按延迟自动选择节点、是否显示访客 IP、是否记录结果、页脚文案
 - **账号安全**：修改管理员账号与密码（PBKDF2-SHA256 加盐存储）
 
@@ -322,15 +407,14 @@ d923:7900:709a:8f54
 整组向上收拢，不会裁掉顶部。
 
 点「设置」展开的是一块三段式面板（与 speedtest.net 的 SETTINGS 同构）：**全局设置**（时间 12/24 小时、
-日期格式、距离单位、速度单位）、**当前连接**（运营商 / IP / 地区 / 经纬度）、**测速节点**（当前节点 + 更换）。
+日期格式、速度单位）、**当前连接**（运营商 / IP / 地区 / 经纬度）、**测速节点**（当前节点 + 更换）。
 偏好存在 `localStorage["st_prefs2"]`，由 `web/prefs.js` 读写；报告页顶栏的「设置」是同一个面板（多一行「服务器」）。
 
-- **默认值**与原版一致：12 小时制、`MM/DD/YYYY`、英里、Mbps。
-- 改完**立刻生效**，不用刷新：面板底部有一行示例（`预览：11/18/2026 1:24:05 PM · 54.28 Mbps · 12.4 mi`），
-  报告页的时间、下载/上传数字与单位、节点距离会同步重算（Kbps 会换算数值并改单位标签）。
-- 存储键名带版本号（`st_prefs2`），老访客以前点过的 24 小时 / 公里会被新默认值取代。
-- **距离**要显示在节点列表里，需要节点填了经纬度（后台「测速节点 → 纬度 / 经度」，可选）；
-  没填时该行只显示地区，面板里的示例行仍会按所选单位换算。
+- **默认值**与原版一致：12 小时制、`MM/DD/YYYY`、Mbps。
+- 改完**立刻生效**，不用刷新：面板底部有一行示例（`预览：11/18/2026 1:24:05 PM · 54.28 Mbps`），
+  报告页的时间、下载/上传数字与单位会同步重算（Kbps 会换算数值并改单位标签）。
+- 存储键名带版本号（`st_prefs2`），老访客以前点过的 24 小时会被新默认值取代。
+- **节点距离已不再显示**（1.3.8 起）：节点列表与「当前节点」只显示地区，英里/公里这个选项也一并去掉了。
 
 展开时下方「信息行 / 协议 / 连接方式」让位，开始测速自动收起。
 

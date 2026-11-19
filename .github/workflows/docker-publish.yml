@@ -1,15 +1,21 @@
-name: 构建并推送镜像到 GHCR
+name: 构建并推送镜像（多架构 / 主控 + 节点）
 
-#  triggered by: 推送 tag（如 v1.2.36）或手动触发
+# 触发：推 tag（v1.4.0）、推 main（构建 latest）、或手动触发。
+# 一次运行会产出两个仓库：
+#   ghcr.io/<owner>/<repo>       ← 主控版（APP_MODE=controller）
+#   ghcr.io/<owner>/<repo>-node  ← 节点版（APP_MODE=node）
+# 两者二进制完全相同，只是镜像名区分开，便于 compose 里直接写死各自的地址。
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  # ${{ github.repository }} 自动等于 "你的用户名/仓库名"，无需手改
+  # 自动等于 "owner/repo"，无需手改
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
@@ -17,13 +23,35 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # 推送到 ghcr.io 需要 write 权限
+      packages: write   # 推 ghcr.io 需要写权限
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - main
+          - node
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      # arm64 镜像靠 QEMU 交叉编译；Dockerfile 里已按 TARGETARCH 选择 GOARCH
+      - name: 设置 QEMU（arm64 模拟）
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: 设置 Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: 计算镜像名
+        id: img
+        run: |
+          if [ "${{ matrix.variant }}" = "node" ]; then
+            echo "name=${REGISTRY}/${IMAGE_NAME}-node" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 登录 GHCR
         uses: docker/login-action@v3
@@ -36,20 +64,59 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.img.outputs.name }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' }}
 
-      - name: 构建并推送
+      - name: 构建并推送（amd64 + arm64）
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+
+  # 构建成功后自动创建 Release（仅推 tag 时），附上镜像地址与一键安装命令
+  release:
+    needs: build-and-push
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## 镜像
+
+            | 用途 | 镜像 |
+            |---|---|
+            | 主控（网页 + 后台 + 报告） | `ghcr.io/${{ github.repository }}:${{ github.ref_name }}` |
+            | 测速节点 | `ghcr.io/${{ github.repository }}-node:${{ github.ref_name }}` |
+
+            支持 `linux/amd64` 与 `linux/arm64`（ARM 小鸡可直接拉）。
+
+            ## 一键安装
+
+            ```bash
+            # 主控
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/deploy/install.sh \
+              | sudo bash -s -- --image ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+            # 节点
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/deploy/install-node.sh \
+              | sudo bash -s -- --image ghcr.io/${{ github.repository }}-node:${{ github.ref_name }} --domain node.example.com
+            ```
+
+            卸载脚本分别在 `deploy/uninstall.sh`（主控）与 `deploy/uninstall-node.sh`（节点）。

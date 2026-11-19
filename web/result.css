@@ -7,7 +7,7 @@
        url("/fonts/montserrat.woff2") format("woff2");
 }
 
-/* 读数专用字体，与 speedtest.net 同款 */
+/* 读数专用字体：数字窄、等宽 */
 @font-face {
   font-family: "gauge-mono";
   font-style: normal;
@@ -18,7 +18,7 @@
 
 :root {
   --bg: #000000;
-  --card: #0a0a0a;
+  --card: #101114;
   --fg: #ffffff;
   --muted: #8b8f94;
   --muted-2: #5c6167;
@@ -31,6 +31,9 @@
   --ico-ul: #b75cf0;
   --lat-dl: #00c9c0;
   --lat-ul: #b75cf0;
+  /* 抖动、丢包：抖动用中性灰蓝，丢包用告警红 */
+  --lat-jit: #4aa8ff;
+  --lat-loss: #f2555a;
   --ico-ping: #d4ac12;
   --ico-share: #35b6f0;
   --exp-ico: #9aa0a6;
@@ -52,6 +55,11 @@
   --cross: rgba(255, 255, 255, 0.45);
   --go-hover-border: #6ff0ff;
   --scale-on-fg: #04121a;
+  /* 顶栏 */
+  --header-bg: rgba(0, 0, 0, 0.88);
+  --hover: rgba(255, 255, 255, 0.07);
+  --panel: #12161c;
+  --panel-line: rgba(255, 255, 255, 0.14);
 }
 
 /* 浅色主题：跟随主站的 st_theme 切换 */
@@ -69,6 +77,8 @@
   --ico-ul: #a84be0;
   --lat-dl: #00b3aa;
   --lat-ul: #a84be0;
+  --lat-jit: #1f7fe0;
+  --lat-loss: #d93a45;
   --ico-ping: #b89800;
   --ico-share: #1a9fd6;
   --exp-ico: #656565;
@@ -89,6 +99,10 @@
   --cross: rgba(0, 0, 0, 0.4);
   --go-hover-border: var(--cyan);
   --scale-on-fg: #ffffff;
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --hover: rgba(0, 0, 0, 0.05);
+  --panel: #ffffff;
+  --panel-line: rgba(0, 0, 0, 0.1);
 }
 
 [hidden] { display: none !important; }
@@ -104,11 +118,162 @@ body {
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   display: flex;
-  justify-content: center;
-  padding: 26px 20px 40px;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 40px;
 }
 
-.wrap { width: 100%; max-width: 980px; }
+.wrap { width: 100%; max-width: 980px; padding: 24px 20px 0; }
+
+/* ---------------- 顶部品牌栏 ---------------- */
+
+.site-header {
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--header-bg);
+  backdrop-filter: blur(10px);
+}
+
+.header-inner {
+  max-width: 1260px;
+  margin: 0 auto;
+  height: 62px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  text-decoration: none;
+  margin-right: 12px;
+}
+
+.logo-mark { width: 20px; height: 20px; display: block; }
+
+.logo-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.hbtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.hbtn:hover { color: var(--fg); background: var(--hover); }
+
+.menu-wrap { position: relative; }
+
+.menu-panel {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  min-width: 138px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--pop-shadow);
+  z-index: 40;
+}
+
+.menu-panel[hidden] { display: none; }
+
+.menu-panel a,
+.menu-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menu-panel a:hover,
+.menu-panel button:hover { background: var(--hover); }
+
+.theme-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  width: 48px;
+  height: 25px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  margin-left: 4px;
+  padding: 0;
+}
+
+.theme-btn:hover { color: var(--fg); border-color: var(--fg); }
+
+[data-theme="dark"] .i-sun { opacity: 0.45; }
+[data-theme="light"] .i-moon { opacity: 0.45; }
+[data-theme="dark"] .i-moon,
+[data-theme="light"] .i-sun { opacity: 1; color: var(--fg); }
+
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 19px;
+  border: 1px solid var(--fg);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pill-btn:hover { background: var(--fg); color: var(--bg); }
+
+.pill-download {
+  gap: 6px;
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.pill-download:hover { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+
+.rainbow {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, #10d9ff 0%, #0f7bff 26%, #5a3bff 58%, #a13bff 80%, #d13bff 100%);
+}
 
 /* ---------------- 顶栏 ---------------- */
 
@@ -351,11 +516,11 @@ body {
   background: var(--card);
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 30px 34px 34px;
 }
 
-/* 上半区：左 GO、右结果（与 speedtest 结果页同构） */
+/* 上半区：左 GO、右结果 */
 .head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -399,9 +564,10 @@ body {
 
 .pingline {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 26px;
+  gap: 8px 22px;
   margin-top: 8px;
   font-size: 14px;
 }
@@ -418,6 +584,12 @@ body {
 .pico.violet { color: var(--ico-ul); }
 .pico.lat-dl { color: var(--lat-dl); }
 .pico.lat-ul { color: var(--lat-ul); }
+.pico.lat-loss { color: var(--lat-loss); }
+.pico.jit { color: var(--lat-jit); }
+/* 抖动（蓝）与丢包（红）整项同色：图标 + 数值 */
+.jit-v b { color: var(--lat-jit); }
+.loss-v b { color: var(--lat-loss); }
+
 
 /* 体验指标：四个图标 + 5 点评级 */
 
@@ -683,9 +855,19 @@ body {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 760px) {
-  body { padding: 18px 14px 30px; }
-  .bar { grid-template-columns: 1fr auto; row-gap: 10px; }
-  .rid { order: 3; grid-column: 1 / -1; text-align: left; }
+  body { padding: 0 0 30px; }
+  .site-header { width: 100%; }
+  .wrap { padding: 14px 14px 0; }
+  .header-inner { height: 56px; padding: 0 14px; gap: 2px; }
+  .logo-text { font-size: 11px; letter-spacing: 0.12em; }
+  .logo { margin-right: 4px; }
+  .menu-wrap { display: none; }
+  .pill-btn { height: 32px; padding: 0 14px; font-size: 12.5px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .share { order: 1; }
+  .nav { order: 2; margin-left: auto; gap: 12px; }
+  .lang-btn, .nav-link { white-space: nowrap; }
+  .rid { order: 3; width: 100%; text-align: left; }
   .card { padding: 22px 18px 26px; }
   .head { grid-template-columns: 1fr; gap: 14px; }
   .head .go { margin: 0 auto; }
@@ -705,3 +887,35 @@ body {
 }
 :root[data-conn="single"] .go { border-color: #ff9a70; }
 :root[data-conn="single"] .go:hover { border-color: #ffb08c; background: rgba(255, 154, 112, 0.08); }
+
+/* ---------------- 加载 / 失败状态 ---------------- */
+
+/* 数据没回来之前先别闪空壳（--、空卡片、问卷等），避免刷新时看到「残留」 */
+body.res-loading .wrap > *:not(.bar) { visibility: hidden; }
+body.res-error .card,
+body.res-error .foot { display: none; }
+
+.res-state {
+  margin-top: 8px;
+  padding: 72px 24px 76px;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  border-radius: 10px;
+}
+.res-state[hidden] { display: none; }
+.res-state-ico { display: flex; justify-content: center; color: var(--muted-2); margin-bottom: 16px; }
+.res-state-t { font-size: 16px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 8px; }
+.res-state-s { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+.res-state-btn {
+  display: inline-block;
+  padding: 9px 24px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  font-size: 13px;
+  color: var(--fg);
+  text-decoration: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.res-state-btn:hover { border-color: var(--go-hover-border); background: var(--hover-soft); }

@@ -170,6 +170,9 @@ type Result struct {
 	Download    float64   `json:"download"`
 	Upload      float64   `json:"upload"`
 	Loss        float64   `json:"loss"`
+	// 带载延迟：下载 / 上传进行中测得的延迟（老记录没有，报告页显示 --）
+	DownLat float64 `json:"downLat,omitempty"`
+	UpLat   float64 `json:"upLat,omitempty"`
 	Connections int       `json:"connections"`
 	// 本次测速实际消耗的流量（字节）：下载 + 上传，报告页直接展示
 	DownloadBytes int64 `json:"downloadBytes,omitempty"`

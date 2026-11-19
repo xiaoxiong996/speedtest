@@ -26,7 +26,6 @@
   </div>
 </header>
 
-<!-- 登录 -->
 <section class="login-wrap" id="loginView">
   <form class="login-card" id="loginForm">
     <h1>管理员登录</h1>
@@ -44,9 +43,11 @@
   </form>
 </section>
 
-<!-- 后台 -->
 <section id="appView" hidden>
   <div class="wrap">
+    <div id="pwdWarn" hidden style="margin:0 0 14px;padding:12px 14px;border:1px solid #b8860b;border-radius:10px;background:#3a2c06;color:#ffd479;font-size:13px;line-height:1.6;cursor:pointer">
+      ⚠️ 你还在用安装时的默认密码，任何人都能进后台。点这里去改。
+    </div>
     <div class="tabs">
       <button class="tab active" data-tab="overview" type="button">概览</button>
       <button class="tab" data-tab="nodes" type="button">测速节点</button>
@@ -54,7 +55,6 @@
       <button class="tab" data-tab="account" type="button">账号安全</button>
     </div>
 
-    <!-- 概览 -->
     <div class="tab-panel" id="panel-overview">
       <div class="kpis">
         <div class="kpi"><div class="kpi-label">节点数</div><div class="kpi-value" id="kpiNodes">-</div></div>
@@ -75,7 +75,6 @@
       </div>
     </div>
 
-    <!-- 节点 -->
     <div class="tab-panel" id="panel-nodes" hidden>
       <div class="card">
         <div class="card-head">
@@ -89,7 +88,6 @@
       </div>
     </div>
 
-    <!-- 站点设置 -->
     <div class="tab-panel" id="panel-settings" hidden>
       <form class="card" id="settingsForm">
         <div class="card-head">
@@ -114,6 +112,10 @@
             </div>
           </div>
         </div>
+        <div class="switch-row">
+          <div><div class="sw-label">顶部只显示文字（不显示图标）</div><div class="sw-desc">开启后左上角 logo 只留站点名，不显示自定义图标，也不显示默认圆环图标；刷新不会闪出图标</div></div>
+          <label class="switch"><input type="checkbox" id="setHideIcon"><i></i></label>
+        </div>
         <div class="grid-2">
           <label class="field"><span>默认节点（IPv4）</span><select id="setDefaultNode"></select></label>
           <label class="field"><span>默认节点（IPv6）</span><select id="setDefaultNode6"></select></label>
@@ -129,6 +131,59 @@
         <label class="field" style="max-width:240px"><span>仪表盘量程（Mbps）</span><input type="number" id="setGauge" min="100" max="100000" step="100">
           <div class="desc">超过量程时表盘会自动扩展，一般保持 1000 即可。</div>
         </label>
+
+        <div class="card-head" style="margin-top:8px">
+          <div class="card-title">评级标准（5 档）</div>
+        </div>
+        <div class="desc" style="margin:-4px 0 12px">
+          网页 / 游戏 / 视频 / 通话 四项按「有效延迟 = 延迟 + 抖动 × 权重」评级：不超过第 1 个阈值是 5 档（最好），超过第 4 个阈值是 1 档（最差），单位 ms。
+        </div>
+        <label class="field" style="max-width:220px"><span>抖动权重</span><input type="number" id="setRateJitter" min="0" max="10" step="0.5">
+          <div class="desc">0 表示不看抖动；默认 2，即 10ms 抖动按 20ms 计入有效延迟。</div>
+        </label>
+        <div class="rate-grid rate-head">
+            <span>指标</span>
+            <span>5 档 ≤</span>
+            <span>4 档 ≤</span>
+            <span>3 档 ≤</span>
+            <span>2 档 ≤</span>
+        </div>
+          <div class="rate-grid">
+            <span>网页</span>
+            <input type="number" id="setRateWeb0" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateWeb1" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateWeb2" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateWeb3" min="0" max="60000" step="1" inputmode="decimal">
+          </div>
+          <div class="rate-grid">
+            <span>游戏</span>
+            <input type="number" id="setRateGame0" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateGame1" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateGame2" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateGame3" min="0" max="60000" step="1" inputmode="decimal">
+          </div>
+          <div class="rate-grid">
+            <span>视频</span>
+            <input type="number" id="setRateVideo0" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateVideo1" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateVideo2" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateVideo3" min="0" max="60000" step="1" inputmode="decimal">
+          </div>
+          <div class="rate-grid">
+            <span>通话</span>
+            <input type="number" id="setRateCall0" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateCall1" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateCall2" min="0" max="60000" step="1" inputmode="decimal">
+            <input type="number" id="setRateCall3" min="0" max="60000" step="1" inputmode="decimal">
+          </div>
+          <div class="rate-grid">
+            <span>丢包</span>
+            <input type="number" id="setRateLoss0" min="0" max="100" step="0.1" inputmode="decimal">
+            <input type="number" id="setRateLoss1" min="0" max="100" step="0.1" inputmode="decimal">
+            <input type="number" id="setRateLoss2" min="0" max="100" step="0.1" inputmode="decimal">
+            <input type="number" id="setRateLoss3" min="0" max="100" step="0.1" inputmode="decimal">
+          </div>
+          <div class="desc" style="margin-top:-2px">丢包按百分比（%），同样 4 个阈值切 5 档。</div>
 
         <div class="card-head" style="margin-top:8px">
           <div class="card-title">前台行为</div>
@@ -166,6 +221,13 @@
         <div class="desc" style="margin-top:-4px">两个域名指向本站后端即可（可用 SNI 分流到同一端口）。留空则沿用对外主域名。</div>
 
         <div class="card-head" style="margin-top:8px">
+          <div class="card-title">访客地址解析</div>
+        </div>
+        <div class="desc" style="margin-bottom:8px">换 CDN 后点一次，能看到中间层实际转发过来的头、以及最终取到的访客地址。</div>
+        <button class="btn ghost" id="btnIpDebug" type="button">检测当前解析</button>
+        <pre id="ipDebugOut" hidden style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all"></pre>
+
+        <div class="card-head" style="margin-top:8px">
           <div class="card-title">路由路径段（自定义）</div>
         </div>
         <div class="grid-3">
@@ -195,7 +257,6 @@
       </form>
     </div>
 
-    <!-- 账号 -->
     <div class="tab-panel" id="panel-account" hidden>
       <form class="card" id="accountForm" style="max-width:520px">
         <div class="card-head"><div class="card-title">账号与密码</div></div>
@@ -212,7 +273,6 @@
   </div>
 </section>
 
-<!-- 节点编辑弹窗 -->
 <div class="modal-back" id="nodeModal" hidden>
   <form class="modal-box" id="nodeForm">
     <h3 id="nodeModalTitle">添加测速节点</h3>
@@ -236,7 +296,7 @@
       <label class="field">
         <span>纬度（可选）</span>
         <input type="text" id="nodeLat" placeholder="如：31.2304">
-        <div class="desc">和经度一起填，前台节点列表会显示访客到该节点的距离。</div>
+        <div class="desc">仅作记录，前台不再显示距离。</div>
       </label>
       <label class="field">
         <span>经度（可选）</span>

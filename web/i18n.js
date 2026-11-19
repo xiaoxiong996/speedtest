@@ -58,7 +58,7 @@
       change: "更换",
       toggleConnections: "切换连接方式",
       selectServer: "选择测速节点",
-      noServersInList: "暂无可用的测速节点",
+      noServersInList: "还没有配置测速节点：后台 → 节点 → 添加节点",
       unavailable: "不可用",
 
       /* 连接方式 */
@@ -101,7 +101,7 @@
       lon: "经度",
 
       /* 提示 */
-      pickServerFirst: "请先选择测速节点",
+      pickServerFirst: "还没有配置测速节点，请先到后台添加",
       linkCopied: "报告链接已复制",
       noResultYet: "还没有测速结果",
       summary: "延迟 {ping}ms · 下载 {down}Mbps · 上传 {up}Mbps",
@@ -123,6 +123,7 @@
       reportFoot: "{site} · 报告编号 {id}",
       missingId: "缺少报告编号",
       notFound: "报告不存在或已过期",
+      resStateDesc: "报告链接可能已失效，重新测速即可生成新的报告。",
       changeServer: "更换节点",
       shareToX: "分享到 X",
       shareToFB: "分享到 Facebook",
@@ -184,7 +185,7 @@
       change: "Change",
       toggleConnections: "Switch connections",
       selectServer: "Select a server",
-      noServersInList: "No servers available",
+      noServersInList: "No speed servers yet — add one in Admin → Nodes",
       unavailable: "Unavailable",
 
       connections: "Connections",
@@ -223,7 +224,7 @@
       lat: "Lat",
       lon: "Lon",
 
-      pickServerFirst: "Please select a server first",
+      pickServerFirst: "No speed server configured yet — add one in Admin → Nodes",
       linkCopied: "Result link copied",
       noResultYet: "No test result yet",
       summary: "Latency {ping}ms · Download {down}Mbps · Upload {up}Mbps",
@@ -244,6 +245,7 @@
       reportFoot: "{site} · Result ID {id}",
       missingId: "Missing result ID",
       notFound: "Result not found or expired",
+      resStateDesc: "This report link may have expired. Run a new test to generate a fresh report.",
       changeServer: "Change Server",
       shareToX: "Share on X",
       shareToFB: "Share on Facebook",

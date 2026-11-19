@@ -39,6 +39,9 @@ type Settings struct {
 	// IconURL 是后台上传的自定义站点图标路径（如 /site-icon?v=123）。
 	// 为空时用内置默认 favicon.svg；上传接口会写入带版本号的路径以绕过浏览器缓存。
 	IconURL         string `json:"iconUrl,omitempty"`
+	// HideLogoIcon：顶部 logo 只显示文字，不显示任何图标（含默认圆环与自定义图标）。
+	// 用于纯文字品牌；勾选后首屏就是纯文字，刷新也不会闪出图标。
+	HideLogoIcon    bool   `json:"hideLogoIcon,omitempty"`
 	// TitleSuffix 是标签页标题里站点名后面的文字（如「网络测速」/「Speed Test」），
 	// 留空时按当前界面语言使用内置默认文案。
 	TitleSuffix     string `json:"titleSuffix,omitempty"`
@@ -70,6 +73,66 @@ type Settings struct {
 	PathV4     string `json:"pathV4,omitempty"`
 	PathV6     string `json:"pathV6,omitempty"`
 	PathResult string `json:"pathResult,omitempty"`
+	// Rating 是体验指标的 5 档评级门槛（后台可调）
+	Rating Rating `json:"rating"`
+}
+
+// Rating 是「网页 / 游戏 / 视频 / 通话」四个体验指标 + 丢包的 5 档评级门槛，
+// 全部由后台调整。
+//
+// 判定方式：有效延迟 = 延迟 + 抖动 × JitterWeight，再按每个指标从小到大
+// 的 4 个阈值切成 5 档（5 档最好、1 档最差）；丢包按百分比各自 4 个阈值。
+type Rating struct {
+	JitterWeight float64   `json:"jitterWeight"`
+	Web          []float64 `json:"web"`
+	Game         []float64 `json:"game"`
+	Video        []float64 `json:"video"`
+	Call         []float64 `json:"call"`
+	Loss         []float64 `json:"loss"`
+}
+
+func defaultRating() Rating {
+	return Rating{
+		JitterWeight: 2,
+		Web:          []float64{40, 80, 150, 300},
+		Game:         []float64{30, 60, 100, 180},
+		Video:        []float64{50, 100, 180, 320},
+		Call:         []float64{40, 80, 140, 240},
+		Loss:         []float64{0.1, 0.5, 1.5, 4},
+	}
+}
+
+// normalizeRating 把缺字段 / 脏数据拉回可用状态，返回是否发生了修改。
+// 老配置没有 rating 字段时这里会整体填入默认值。
+func normalizeRating(r *Rating) bool {
+	def := defaultRating()
+	changed := false
+	if !(r.JitterWeight >= 0) || r.JitterWeight > 10 {
+		r.JitterWeight = def.JitterWeight
+		changed = true
+	}
+	fix := func(v *[]float64, d []float64, max float64) {
+		cur := *v
+		ok := len(cur) == len(d)
+		if ok {
+			for i, x := range cur {
+				if !(x >= 0) || x > max || (i > 0 && x < cur[i-1]) {
+					ok = false
+					break
+				}
+			}
+		}
+		if !ok {
+			*v = append([]float64(nil), d...)
+			changed = true
+		}
+	}
+	fix(&r.Web, def.Web, 60000)
+	fix(&r.Game, def.Game, 60000)
+	fix(&r.Video, def.Video, 60000)
+	fix(&r.Call, def.Call, 60000)
+	fix(&r.Loss, def.Loss, 100)
+	return changed
 }
 
 type AdminUser struct {
@@ -80,6 +143,9 @@ type AdminUser struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	// SessionVersion 每次改密递增，旧会话 token 里带的版本对不上就立即失效。
 	SessionVersion int `json:"sessionVersion,omitempty"`
+	// MustChange 首次安装仍在用内置默认密码时为 true，登录后界面会一直提醒改密，
+	// 改完密码自动置回 false（并落盘），重启也不会再提示。
+	MustChange bool `json:"mustChange,omitempty"`
 }
 
 type Config struct {
@@ -119,6 +185,7 @@ func defaultSettings() Settings {
 		PathV4:          normalizePathSeg(env("PATH_V4", ""), "ipv4"),
 		PathV6:          normalizePathSeg(env("PATH_V6", ""), "ipv6"),
 		PathResult:      normalizePathSeg(env("PATH_RESULT", ""), "result"),
+		Rating:          defaultRating(),
 	}
 }
 
@@ -210,13 +277,22 @@ func normalizeAdminPath(v string) string {
 	return v
 }
 
+// 新安装的默认后台入口：开箱即用，登录后可在「站点设置 → 后台入口」改成任意值，
+// 改动写进 data/config.json，重启后仍然生效。
+const defaultAdminPathValue = "st-panel"
+
+// 新安装的默认管理员账号 / 密码：固定值，装上就能登录；
+// 首次登录后界面会持续提醒修改（改完写进 config.json，重启不丢）。
+const (
+	defaultAdminUser = "admin"
+	defaultAdminPass = "Speedtest@2026"
+)
+
 func defaultAdminPath() string {
 	if v := normalizeAdminPath(env("ADMIN_PATH", "")); v != "" {
 		return v
 	}
-	// 新安装不再使用 README 里人人皆知的固定路径，随机生成并写进 config.json；
-	// 登录后台后可随时在「站点设置 → 后台入口」改成自己好记的值。
-	return "panel-" + randomHex(4)
+	return defaultAdminPathValue
 }
 
 func NewStore(path string) (*Store, error) {
@@ -251,31 +327,63 @@ func NewStore(path string) (*Store, error) {
 		s.cfg.Settings.AdminPath = defaultAdminPath()
 		changed = true
 	}
-	if s.cfg.Admin.Username == "" {
-		user := env("ADMIN_USER", "admin")
-		pass := os.Getenv("ADMIN_PASSWORD")
-		if pass == "" {
-			// 不再退回 admin888 这种公开默认值：随机生成并只写进 data/config.json 的哈希，
-			// 同时打一条日志提醒管理员首次登录后立即改密。
-			pass = randomHex(12)
-			log.Printf("未设置 ADMIN_PASSWORD，已生成随机初始密码（仅此一次显示）: %s", pass)
-		}
-		s.cfg.Admin = newAdmin(user, pass)
+	// 老配置没有 rating：补默认评级门槛并落盘
+	if normalizeRating(&s.cfg.Settings.Rating) {
 		changed = true
 	}
-	if len(s.cfg.Nodes) == 0 {
-		s.cfg.Nodes = []Node{{
-			ID:       "node-local",
-			Name:     env("NODE_NAME", "默认节点"),
-			Sponsor:  env("NODE_SPONSOR", "自建机房"),
-			Location: env("NODE_LOCATION", "中国"),
-			URL:      normalizeNodeURL(env("NODE_URL", "")),
-			URL6:     normalizeNodeURL(env("NODE_URL6", "")),
-			Enabled:  true,
-			Local:    true,
-		}}
-		s.cfg.Settings.DefaultNode = "node-local"
-		s.cfg.Settings.DefaultNode6 = "node-local"
+	if s.cfg.Admin.Username == "" {
+		user := env("ADMIN_USER", defaultAdminUser)
+		pass := os.Getenv("ADMIN_PASSWORD")
+		usingDefault := false
+		if pass == "" {
+			// 固定默认密码，装上就能登录（否则新用户根本不知道该填什么）。
+			// 代价是默认值在文档里公开，所以用 mustChange 一直提醒，登录后改掉即可。
+			pass = defaultAdminPass
+			usingDefault = true
+		}
+		s.cfg.Admin = newAdmin(user, pass)
+		s.cfg.Admin.MustChange = usingDefault
+		if usingDefault {
+			log.Printf("首次安装：后台入口 /%s，账号 %s，密码 %s（默认值，请登录后立即修改）",
+				s.cfg.Settings.AdminPath, user, pass)
+		}
+		changed = true
+	} else if os.Getenv("ADMIN_PASSWORD") != "" {
+		// 账号已经建过：env 里的 ADMIN_PASSWORD 只用于首次初始化，
+		// 之后一律以 data/config.json 里的哈希为准，重启不会把后台改过的密码覆盖回去。
+		log.Printf("管理员账号已存在，忽略环境变量 ADMIN_PASSWORD（密码以后台设置为准，重启不覆盖）")
+	}
+	// 主控只做控制台：不再自动生成「本机节点」。
+	// 老版本首次安装会塞一个 local=true 的节点（URL 留空时表示“测速走主控自己”），
+	// 现在主控不再提供测速带宽，这类没有地址的节点必须清掉；
+	// 有地址的 local 节点（历史上把自建节点标成了本机）保留，只是把标记改回普通节点。
+	migrated := false
+	if len(s.cfg.Nodes) > 0 {
+		kept := make([]Node, 0, len(s.cfg.Nodes))
+		dropped := map[string]bool{}
+		for _, n := range s.cfg.Nodes {
+			if n.Local && strings.TrimSpace(n.URL) == "" && strings.TrimSpace(n.URL6) == "" {
+				dropped[n.ID] = true
+				migrated = true
+				continue
+			}
+			if n.Local {
+				n.Local = false
+				migrated = true
+			}
+			kept = append(kept, n)
+		}
+		if migrated {
+			s.cfg.Nodes = kept
+			if dropped[s.cfg.Settings.DefaultNode] {
+				s.cfg.Settings.DefaultNode = firstNodeID(kept)
+			}
+			if dropped[s.cfg.Settings.DefaultNode6] {
+				s.cfg.Settings.DefaultNode6 = firstNodeID(kept)
+			}
+		}
+	}
+	if migrated {
 		changed = true
 	}
 	if changed {
@@ -284,6 +392,16 @@ func NewStore(path string) (*Store, error) {
 		}
 	}
 	return s, nil
+}
+
+// firstNodeID 返回第一个节点的 ID（用于把失效的默认节点指回来）。
+func firstNodeID(nodes []Node) string {
+	for _, n := range nodes {
+		if n.Enabled {
+			return n.ID
+		}
+	}
+	return ""
 }
 
 func (s *Store) Get() Config {
@@ -331,6 +449,7 @@ func (s *Store) LocalNode() Node {
 
 /* ---------- 密码 ---------- */
 
+// newAdmin 生成一条新的账号记录（MustChange 默认 false，改密后不该再提示）。
 func newAdmin(user, pass string) AdminUser {
 	salt := randomHex(16)
 	iter := 120000

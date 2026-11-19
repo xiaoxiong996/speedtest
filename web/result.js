@@ -74,19 +74,46 @@
 
   /* ---------------- 体验评级 ---------------- */
 
-  function levelBySpeed(v, steps) {
-    if (!isFinite(v) || v <= 0) return 0;
-    var n = 1;
-    for (var i = 0; i < steps.length; i++) if (v >= steps[i]) n = i + 2;
-    return Math.min(5, n);
+  // 与首页同一套门槛：服务端随报告下发 ratingCfg，缺字段时回落到默认值。
+  var RATING_DEF = {
+    jitterWeight: 2,
+    web: [40, 80, 150, 300],
+    game: [30, 60, 100, 180],
+    video: [50, 100, 180, 320],
+    call: [40, 80, 140, 240],
+    loss: [0.1, 0.5, 1.5, 4]
+  };
+  var RATING = RATING_DEF;
+
+  function ratingSteps(v, def) {
+    if (!v || v.length !== def.length) return def;
+    for (var i = 0; i < v.length; i++) if (!isFinite(v[i]) || v[i] < 0) return def;
+    return v;
   }
 
-  function levelByPing(ms) {
+  function setRatingCfg(c) {
+    c = c || {};
+    RATING = {
+      jitterWeight: isFinite(c.jitterWeight) && c.jitterWeight >= 0 ? c.jitterWeight : RATING_DEF.jitterWeight,
+      web: ratingSteps(c.web, RATING_DEF.web),
+      game: ratingSteps(c.game, RATING_DEF.game),
+      video: ratingSteps(c.video, RATING_DEF.video),
+      call: ratingSteps(c.call, RATING_DEF.call),
+      loss: ratingSteps(c.loss, RATING_DEF.loss)
+    };
+  }
+
+  // 有效延迟 = 延迟 + 抖动 × 权重，再用 4 个阈值切 5 档（越小越好）
+  function levelByLatency(ms, jitter, steps) {
     if (!isFinite(ms) || ms <= 0) return 0;
-    if (ms <= 15) return 5;
-    if (ms <= 30) return 4;
-    if (ms <= 60) return 3;
-    if (ms <= 100) return 2;
+    var eff = ms + Math.max(0, isFinite(jitter) ? jitter : 0) * RATING.jitterWeight;
+    for (var i = 0; i < steps.length; i++) if (eff <= steps[i]) return 5 - i;
+    return 1;
+  }
+
+  function levelByLoss(pct, steps) {
+    var v = isFinite(pct) ? pct : 0;
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) return 5 - i;
     return 1;
   }
 
@@ -99,12 +126,12 @@
     }
   }
 
-  function renderExp(down, up, ping) {
+  function renderExp(ping, jitter) {
     var lv = {
-      web: levelBySpeed(down, [5, 10, 25, 50]),
-      game: levelByPing(ping),
-      video: levelBySpeed(down, [5, 10, 25, 50]),
-      call: levelBySpeed(up, [1, 2, 5, 10])
+      web: levelByLatency(ping, jitter, RATING.web),
+      game: levelByLatency(ping, jitter, RATING.game),
+      video: levelByLatency(ping, jitter, RATING.video),
+      call: levelByLatency(ping, jitter, RATING.call)
     };
     var boxes = document.querySelectorAll("#expRow .exp");
     for (var i = 0; i < boxes.length; i++) {
@@ -178,6 +205,41 @@
   function applyPrefs() {
     readPrefsIntoUI();
     if (lastData) render(lastData);
+  }
+
+  /* ---------------- 顶栏（品牌 / 菜单 / 主题切换） ---------------- */
+
+  function setupHeader() {
+    var tbtn = $("themeBtn");
+    if (tbtn) {
+      tbtn.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("st_theme", next); } catch (e) {}
+      });
+    }
+
+    var mbtn = $("hdrMenuBtn"), mpanel = $("hdrMenuPanel");
+    if (mbtn && mpanel) {
+      mbtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = mpanel.hidden;
+        mpanel.hidden = !open;
+        mbtn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      document.addEventListener("click", function () {
+        if (!mpanel.hidden) {
+          mpanel.hidden = true;
+          mbtn.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    var hs = $("hdrSettings");
+    if (hs) hs.addEventListener("click", function () {
+      if (mpanel) mpanel.hidden = true;
+      if ($("setBtn")) $("setBtn").click();
+    });
   }
 
   function setupSettings() {
@@ -495,8 +557,37 @@
 
   var lastData = null;
 
+  // 一份报告只亮一次自己的 IP：按报告编号记，而不是按 IP 记。
+  // 按 IP 记会有个坑：同一网络连测两份报告，第二份第一次打开就看不到 IP 了。
+  var ipSeen = { id: null, shown: false };
+  var IP_SEEN_KEY = "stIpSeen";
+
+  function seenIds() {
+    try {
+      var v = JSON.parse(localStorage.getItem(IP_SEEN_KEY) || "[]");
+      return Object.prototype.toString.call(v) === "[object Array]" ? v : [];
+    } catch (e) { return []; }
+  }
+
+  function ipAlreadyShown(ip, rid) {
+    rid = rid || "";
+    if (!rid) return false;                    // 没有编号就按「第一次」放行
+    if (ipSeen.id === rid) return !ipSeen.shown;   // 同页重渲染（切语言/单位）沿用首次结论
+    var list = seenIds();
+    var seen = list.indexOf(rid) >= 0;
+    if (!seen) {
+      list.push(rid);
+      if (list.length > 80) list = list.slice(-80);
+      try { localStorage.setItem(IP_SEEN_KEY, JSON.stringify(list)); } catch (e) {}
+      try { localStorage.removeItem("stIpShown"); } catch (e) {}   // 清掉老版本按 IP 记的键
+    }
+    ipSeen = { id: rid, shown: !seen };
+    return seen;
+  }
+
   function render(d) {
     lastData = d;
+    document.body.classList.remove("res-loading");
     var r = d.result;
     document.title = t("reportTitle", { id: r.id, site: r.siteName || "SpeedTest" });
     $("rid").textContent = r.id;
@@ -508,12 +599,16 @@
       if ($("downUnit")) $("downUnit").textContent = unit;
       if ($("upUnit")) $("upUnit").textContent = unit;
     }
+    setRatingCfg(r.ratingCfg);
     $("ping").textContent = fmtPing(r.ping);
     $("jitter").textContent = fmtPing(r.jitter);
+    // 带载延迟：老报告没有这两个字段，显示 -- 而不是 0
+    $("downLat").textContent = r.downLat > 0 ? fmtPing(r.downLat) : "--";
+    $("upLat").textContent = r.upLat > 0 ? fmtPing(r.upLat) : "--";
     $("loss").textContent = (r.loss || 0) + "%";
     $("connMode").textContent = r.connections > 1 ? t("multi") : t("single");
     document.documentElement.setAttribute("data-conn", r.connections > 1 ? "multi" : "single");
-    renderExp(r.download, r.upload, r.ping);
+    renderExp(r.ping, r.jitter);
 
     // 本次测速消耗的流量：下载 + 上传
     var dbytes = Number(r.downloadBytes) || 0;
@@ -530,7 +625,10 @@
     var isp = (window.I18N && window.I18N.ispName ? window.I18N.ispName(r.isp, r.ispEn) : (r.isp || r.ispEn)) || t("unknownIsp");
     $("isp").textContent = isp;
     // 报告链接可以公开分享：测速者自己看得到 IP，别人打开时后端不下发
-    $("ip").textContent = r.ip ? ipLines(r.ip) : (r.restricted ? t("hiddenOwnerOnly") : t("hidden"));
+    // 一个 IP 只展示一次：首次打开显示，之后（含刷新）改显示「已隐藏」
+    var ipTxt = r.ip && !ipAlreadyShown(r.ip, r.id) ? ipLines(r.ip)
+      : (r.ip ? t("hidden") : (r.restricted ? t("hiddenOwnerOnly") : t("hidden")));
+    $("ip").textContent = ipTxt;
 
     // 测速走的 IP 协议（旧报告没有这个字段，整行隐藏）
     if (r.ipVersion === "v4" || r.ipVersion === "v6") {
@@ -548,6 +646,7 @@
     if ($("setServer")) $("setServer").textContent = $("nodeName").textContent || t("serverFallback");
 
     $("foot").textContent = t("reportFoot", { site: r.siteName || "SpeedTest", id: r.id });
+    if ($("hdrSiteName") && r.siteName) $("hdrSiteName").textContent = r.siteName;
 
     // 逐秒曲线：老报告没有 timeline 字段，会显示一条「无数据」提示
     buildChart(r.timeline, r.download, r.upload);
@@ -561,19 +660,16 @@
   }
 
   function fail(msg) {
+    // 取不到报告就不要留半张空壳：隐藏整张卡片，给一句提示和返回按钮
+    document.body.classList.remove("res-loading");
+    document.body.classList.add("res-error");
     $("rid").textContent = resultID || "--";
-    $("foot").innerHTML = msg + ' · <a href="/" style="color:var(--link)">' + t("backHome") + "</a>";
-    $("down").textContent = "--";
-    $("up").textContent = "--";
-    $("rate").hidden = true;
-    $("isp").textContent = "--";
-    $("ip").textContent = "";
-    $("protoRow").hidden = true;
-    $("trafficRow").hidden = true;
-    renderExp(0, 0, 0);
-    $("nodeName").textContent = "--";
-    $("nodeLoc").textContent = "";
-    $("tlBox").hidden = true;
+    var box = $("resState");
+    if (box) {
+      $("resStateTitle").textContent = msg || t("notFound");
+      box.hidden = false;
+      if (window.I18N) window.I18N.apply();
+    }
   }
 
   function initLang() {
@@ -608,6 +704,7 @@
   }
 
   initLang();
+  setupHeader();
   buildExp();
   setupShare();
   buildScale();
@@ -628,16 +725,22 @@
   var tok = ownerToken();
   if (tok) headers["X-Result-Owner"] = tok;
 
-  fetch("/api/result/" + encodeURIComponent(resultID), { cache: "no-store", headers: headers })
-    .then(function (r) {
-      if (!r.ok) throw new Error("not found");
-      return r.json();
-    })
-    .then(function (d) {
-      if (!d || !d.ok) throw new Error("not found");
-      render(d);
-    })
-    .catch(function () {
-      fail(t("notFound"));
-    });
+  function load(tries) {
+    return fetch("/api/result/" + encodeURIComponent(resultID), { cache: "no-store", headers: headers })
+      .then(function (r) {
+        if (!r.ok) throw new Error("not found");
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d || !d.ok) throw new Error("not found");
+        render(d);
+      })
+      .catch(function (e) {
+        // 刷新时偶发的一次请求失败不算「报告不存在」，稍后重试一次
+        if (tries > 0) return new Promise(function (res) { setTimeout(res, 600); }).then(function () { return load(tries - 1); });
+        return Promise.reject(e);
+      });
+  }
+
+  load(1).catch(function () { fail(t("notFound")); });
 })();
