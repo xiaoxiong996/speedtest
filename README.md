@@ -17,7 +17,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.4.5 --url https://speed.example.com
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.5.0 --url https://speed.example.com
 ```
 
 不加任何参数则进入交互式安装（依次询问域名、端口、后台路径、密码）：
@@ -36,11 +36,25 @@ sudo bash install.sh
 
 常用参数：`--port` `--bind` `--url` `--admin-user` `--admin-pass` `--admin-path` `--site-name`，完整列表见 `bash install.sh --help`。
 
+## 节点流量限额与在线人数
+
+后台「测速节点 → 编辑」可以给每个节点设每月流量限额：
+
+| 配置 | 说明 |
+|---|---|
+| 每月流量限额（GB） | 按测速报告里浏览器统计的上下行字节累计；达到限额后主控自动停用该节点，前台立刻选不到它 |
+| 每月重置日（1-28） | 到日子把已用流量清零；只允许到 28 号，避免 2 月漏重置 |
+| 重置时自动启用 | 清零后顺带把因超限停用的节点恢复启用 |
+
+节点列表里随时可以手动「清零」当月流量并重新启用。流量完全由主控统计，节点侧不需要任何配置；即使关闭「收集测速结果」，限额计数照常工作。
+
+首页会在连接信息与 IPv4/IPv6 切换之间显示「N 人正在测速 · 使用 XX 节点」。人数由测速期间的匿名心跳统计（每 5 秒一次，20 秒无心跳即视为结束），主控不记录访客 IP。
+
 ## 节点安装
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install-node.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.4.5 --port 8443 \
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.5.0 --port 8443 \
       --domain node.example.com --host node.example.com --origin https://speed.example.com
 ```
 
@@ -59,11 +73,11 @@ curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/
 
 ```bash
 # 主控
-cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.4.5|' .env
+cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.5.0|' .env
 docker compose pull && docker compose up -d
 
 # 节点（certs/ 不动，证书继续用）
-cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.4.5|' .env
+cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.5.0|' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 

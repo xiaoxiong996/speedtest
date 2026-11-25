@@ -38,6 +38,19 @@ func (s *Server) apiRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleISP(w, r)
 	case path == "/servers" && r.Method == http.MethodGet:
 		s.handleServers(w, r)
+	// 首页「当前测速人数」：ping 是匿名高频心跳，live 是匿名只读快照，都要限流
+	case path == "/live/ping" && r.Method == http.MethodPost:
+		if !s.ops.allow(limitKey(r, "live"), 90, 5*time.Minute) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false})
+			return
+		}
+		s.handleLivePing(w, r)
+	case path == "/live" && r.Method == http.MethodGet:
+		if !s.ops.allow(limitKey(r, "liveget"), 120, 5*time.Minute) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false})
+			return
+		}
+		s.handleLive(w, r)
 	// 注意：主控版不再自带测速节点，/ping、/download、/upload 不在这里注册。
 	// 测速流量一律走节点版（APP_MODE=node），主控只负责页面、后台与节点管理。
 	case path == "/report" && r.Method == http.MethodPost:
@@ -74,10 +87,18 @@ func (s *Server) apiRouter(w http.ResponseWriter, r *http.Request) {
 	case path == "/admin/results" && r.Method == http.MethodGet:
 		s.requireAuth(s.handleResults)(w, r)
 	case strings.HasPrefix(path, "/admin/nodes/"):
-		id := strings.TrimPrefix(path, "/admin/nodes/")
+		rest := strings.TrimPrefix(path, "/admin/nodes/")
+		// 手动重置某节点的本周期流量：POST /api/admin/nodes/{id}/traffic/reset
+		if strings.HasSuffix(rest, "/traffic/reset") && r.Method == http.MethodPost {
+			id := strings.TrimSuffix(rest, "/traffic/reset")
+			s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+				s.handleResetNodeTraffic(w, r, id)
+			})(w, r)
+			return
+		}
 		if r.Method == http.MethodPut || r.Method == http.MethodDelete {
 			s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-				s.handleNodeByID(w, r, id)
+				s.handleNodeByID(w, r, rest)
 			})(w, r)
 			return
 		}
@@ -260,10 +281,6 @@ func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	cfg := s.store.Get()
-	if !cfg.Settings.CollectResults {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "skipped": true})
-		return
-	}
 	var payload struct {
 		NodeID      string  `json:"nodeId"`
 		NodeName    string  `json:"nodeName"`
@@ -311,6 +328,13 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.UploadBytes < 0 || payload.UploadBytes > maxTraffic {
 		payload.UploadBytes = 0
+	}
+	// 节点流量统计放在「是否收集报告」之前：关闭报告收集只是不留历史记录，
+	// 流量限额仍然要算，否则一关收集限额就形同虚设。
+	s.traffic.add(strings.TrimSpace(payload.NodeID), payload.DownloadBytes+payload.UploadBytes)
+	if !cfg.Settings.CollectResults {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "skipped": true})
+		return
 	}
 	// 曲线来自浏览器，做一次范围约束：最多 120 个点，越界与非数值一律按 0 / 丢点处理
 	const maxTimeline = 120
@@ -684,6 +708,10 @@ type nodePayload struct {
 	Enabled  bool    `json:"enabled"`
 	Lat      float64 `json:"lat"`
 	Lon      float64 `json:"lon"`
+	// 流量限额：限额为 0 表示不限；重置日为 0 表示不自动重置
+	TrafficLimitGB    float64 `json:"trafficLimitGB"`
+	TrafficPeriodDay  int     `json:"trafficPeriodDay"`
+	TrafficAutoResume bool    `json:"trafficAutoResume"`
 }
 
 func normalizeNodeURL(raw string) string {
@@ -837,6 +865,23 @@ func validateNode(p nodePayload) (Node, string) {
 		Enabled:  p.Enabled,
 		Lat:      p.Lat,
 		Lon:      p.Lon,
+		TrafficLimitGB:    math.Round(p.TrafficLimitGB*100) / 100,
+		TrafficPeriodDay:  p.TrafficPeriodDay,
+		TrafficAutoResume: p.TrafficAutoResume,
+	}
+	// 流量限额：负数按「不限」处理，上限 100 万 GB，防止误填天文数字把界面撑坏
+	if n.TrafficLimitGB < 0 {
+		n.TrafficLimitGB = 0
+	}
+	if n.TrafficLimitGB > 1e6 {
+		n.TrafficLimitGB = 1e6
+	}
+	// 重置日只接受 1-28：0 表示不自动重置，超过 28 一律按 28（2 月没有 29-31 号）
+	if n.TrafficPeriodDay < 0 {
+		n.TrafficPeriodDay = 0
+	}
+	if n.TrafficPeriodDay > 28 {
+		n.TrafficPeriodDay = 28
 	}
 	// 坐标只用于前台算距离，越界按「没有坐标」处理
 	if n.Lat < -90 || n.Lat > 90 || n.Lon < -180 || n.Lon > 180 {
@@ -872,6 +917,14 @@ func (s *Server) handleSaveNode(w http.ResponseWriter, r *http.Request) {
 		for i := range c.Nodes {
 			if c.Nodes[i].ID == n.ID {
 				n.Local = c.Nodes[i].Local
+				// 累计量由服务端维护，编辑表单不提交这些值
+				n.TrafficUsed = c.Nodes[i].TrafficUsed
+				n.TrafficResetAt = c.Nodes[i].TrafficResetAt
+				n.TrafficBlocked = c.Nodes[i].TrafficBlocked
+				// 调高限额或清空限额后，之前的超限停用自动解除，否则用户会以为改不动
+				if n.TrafficBlocked && !n.trafficOver() {
+					n.TrafficBlocked = false
+				}
 				c.Nodes[i] = n
 				return nil
 			}
@@ -880,6 +933,21 @@ func (s *Server) handleSaveNode(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "node": n})
+}
+
+// handleResetNodeTraffic 手动把某节点的本周期流量清零，可选择同时启用它。
+func (s *Server) handleResetNodeTraffic(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		Resume bool `json:"resume"`
+	}
+	// 允许空 body：不带参数就是只清零、不改启用状态
+	_ = readJSON(r, &body)
+	n, ok := s.resetNodeTraffic(strings.TrimSpace(id), body.Resume)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "节点不存在"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "node": n})

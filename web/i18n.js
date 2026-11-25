@@ -139,7 +139,9 @@
       histCleared: "历史已清空",
       histCount: "共 {n} 条",
       histPing: "延迟",
-      histReport: "报告"
+      histReport: "报告",
+      liveTesting: "{n} 人正在测速",
+      liveUsing: " · 使用 {name}"
     },
 
     en: {
@@ -261,7 +263,9 @@
       histCleared: "History cleared",
       histCount: "{n} tests",
       histPing: "Ping",
-      histReport: "Report"
+      histReport: "Report",
+      liveTesting: "{n} testing now",
+      liveUsing: " · {name}"
     }
   };
 

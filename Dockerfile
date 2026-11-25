@@ -10,8 +10,11 @@ ENV CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH}
 # 依赖：只有 ACME（Let's Encrypt 自动证书）用到的 x/crypto。
 # 先单独拷 go.mod/go.sum 拉依赖，源码改动不会让这层缓存失效。
 COPY go.mod go.sum ./
-RUN go mod download
-COPY main.go config.go http_util.go speed.go api.go isp.go node.go node_acmedns.go node_certstore.go node_ddns.go node_panel.go node_panelcfg.go ./
+# 国内构建时可传 --build-arg GOPROXY=https://goproxy.cn,direct 加速
+ARG GOPROXY=https://proxy.golang.org,direct
+RUN GOPROXY=${GOPROXY} go mod download
+# 用通配符而不是逐个列文件：新增 .go 文件时忘了改这里，构建会直接失败
+COPY *.go ./
 COPY web ./web
 RUN go build -trimpath -ldflags "-s -w" -o /out/speedtest .
 

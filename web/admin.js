@@ -212,24 +212,29 @@
       var tags = [];
       if (n.local) tags.push('<span class="tag local">本机</span>');
       tags.push(n.enabled ? '<span class="tag on">启用</span>' : '<span class="tag off">停用</span>');
+      if (n.trafficBlocked) tags.push('<span class="tag off">超限</span>');
       // 一个节点可以同时有 IPv4 / IPv6 两个接入地址
       var addr = [];
       if (n.url) addr.push("<div class='mono'>IPv4 " + esc(n.url) + "</div>");
       if (n.url6) addr.push("<div class='mono'>IPv6 " + esc(n.url6) + "</div>");
       if (!addr.length) addr.push("<div class='mono'>本机地址</div>");
+      var used = Number(n.trafficUsed) || 0;
+      var canReset = used > 0 || !!n.trafficBlocked;
       return "<tr>" +
         "<td><div>" + esc(n.name) + "</div><div class='mono'>" + tags.join(" ") + "</div></td>" +
         "<td>" + esc(n.location || "-") + "</td>" +
         "<td>" + esc(n.sponsor || "-") + "</td>" +
         "<td>" + addr.join("") + "</td>" +
+        "<td>" + trafficCell(n) + "</td>" +
         "<td><div class='row-actions'>" +
         "<button class='a-btn small' data-act='probe' data-id='" + esc(n.id) + "'>测试</button>" +
         "<button class='a-btn small' data-act='edit' data-id='" + esc(n.id) + "'>编辑</button>" +
+        (canReset ? "<button class='a-btn small' data-act='resetTraffic' data-id='" + esc(n.id) + "'>清零</button>" : "") +
         (n.local ? "" : "<button class='a-btn small danger' data-act='del' data-id='" + esc(n.id) + "'>删除</button>") +
         "</div></td></tr>";
     }).join("");
     box.innerHTML = "<table class='tbl'><thead><tr>" +
-      "<th>节点</th><th>地区</th><th>运营方</th><th>地址</th><th style='text-align:right'>操作</th>" +
+      "<th>节点</th><th>地区</th><th>运营方</th><th>地址</th><th>本月流量</th><th style='text-align:right'>操作</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table>";
 
     box.querySelectorAll("button[data-act]").forEach(function (btn) {
@@ -241,7 +246,52 @@
         if (act === "edit") openNodeModal(node);
         if (act === "del") removeNode(node);
         if (act === "probe") probe(node);
+        if (act === "resetTraffic") resetTraffic(node);
       });
+    });
+  }
+
+  // 字节数转成人类可读；后台流量一律按 GiB（1024^3）换算，与限额口径保持一致
+  function fmtSize(bytes) {
+    var b = Number(bytes) || 0;
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GB";
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+    return (b / 1024).toFixed(0) + " KB";
+  }
+
+  function trafficCell(n) {
+    var used = Number(n.trafficUsed) || 0;
+    var limitGB = Number(n.trafficLimitGB) || 0;
+    if (!limitGB && !used) return "<span class='mono dim'>不限</span>";
+    var html = "";
+    if (limitGB > 0) {
+      var pct = Math.min(100, (used / (limitGB * 1073741824)) * 100);
+      var cls = pct >= 100 ? " over" : (pct >= 80 ? " warn" : "");
+      html += "<div class='q-bar" + cls + "'><i style='width:" + pct.toFixed(1) + "%'></i></div>" +
+        "<div class='mono'>" + fmtSize(used) + " / " + limitGB + " GB</div>";
+    } else {
+      html += "<div class='mono'>" + fmtSize(used) + "</div>";
+    }
+    if (limitGB > 0 && Number(n.trafficPeriodDay) > 0) {
+      html += "<div class='mono dim'>每月 " + Number(n.trafficPeriodDay) + " 号重置" +
+        (n.trafficAutoResume ? "并启用" : "") + "</div>";
+    }
+    if (n.trafficBlocked) html += "<div class='mono over-text'>已达限额，已停用</div>";
+    return html;
+  }
+
+  // 手动清零：默认顺带启用节点，否则清完了它还是停用状态，容易误以为没生效
+  function resetTraffic(node) {
+    if (!confirm("把「" + node.name + "」本月已用流量清零，并重新启用该节点？")) return;
+    api("/api/admin/nodes/" + encodeURIComponent(node.id) + "/traffic/reset", {
+      method: "POST",
+      body: { resume: true }
+    }).then(function () {
+      toast("流量已清零");
+      loadNodes();
+      loadOverview();
+    }).catch(function (err) {
+      toast(err.message);
     });
   }
 
@@ -280,6 +330,9 @@
     $("nodeLat").value = node && node.lat ? String(node.lat) : "";
     $("nodeLon").value = node && node.lon ? String(node.lon) : "";
     $("nodeEnabled").checked = node ? !!node.enabled : true;
+    $("nodeQuota").value = node && node.trafficLimitGB ? String(node.trafficLimitGB) : "";
+    $("nodeQuotaDay").value = node && node.trafficPeriodDay ? String(node.trafficPeriodDay) : "";
+    $("nodeQuotaResume").checked = node ? !!node.trafficAutoResume : true;
     $("probeBtn").style.display = "";
   }
 
@@ -300,6 +353,9 @@
       url6: $("nodeUrl6").value.trim(),
       lat: parseFloat($("nodeLat").value) || 0,
       lon: parseFloat($("nodeLon").value) || 0,
+      trafficLimitGB: parseFloat($("nodeQuota").value) || 0,
+      trafficPeriodDay: parseInt($("nodeQuotaDay").value, 10) || 0,
+      trafficAutoResume: $("nodeQuotaResume").checked,
       enabled: $("nodeEnabled").checked
     };
     if (!body.name) { $("nodeErr").textContent = "请填写节点名称"; return; }

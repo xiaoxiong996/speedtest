@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.4.5"
+const appVersion = "1.5.0"
 
 var errNodeNotFound = errors.New("node not found")
 
@@ -32,11 +32,15 @@ var startedAt = time.Now()
 var webFS embed.FS
 
 type Server struct {
-	store    *Store
-	limiter  *loginLimiter
-	ops      *opLimiter
-	results  *resultLog
-	dataDir  string
+	store   *Store
+	limiter *loginLimiter
+	ops     *opLimiter
+	results *resultLog
+	dataDir string
+	// traffic 缓冲节点承载的测速流量，定期落盘（见 traffic.go）
+	traffic *trafficMeter
+	// live 记录当前正在测速的会话，仅内存，用于首页人数展示
+	live *liveTracker
 }
 
 func main() {
@@ -86,7 +90,27 @@ func main() {
 		ops:     newOpLimiter(),
 		results: newResultLog(filepath.Join(dataDir, "results.jsonl")),
 		dataDir: dataDir,
+		traffic: newTrafficMeter(),
+		live:    newLiveTracker(),
 	}
+
+	// 流量统计：内存累加 → 定期落盘；每天检查一次「每月重置日」。
+	// 两者都是纯后台任务，失败只记日志，不影响测速服务本身。
+	go func() {
+		t := time.NewTicker(trafficFlushInterval)
+		defer t.Stop()
+		for range t.C {
+			srv.flushTraffic()
+		}
+	}()
+	go func() {
+		srv.maybeResetTraffic() // 启动先跑一次，避免刚好跨过重置日的那次重启漏掉
+		t := time.NewTicker(30 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			srv.maybeResetTraffic()
+		}
+	}()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/", srv.apiRouter)
@@ -127,6 +151,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	httpServer.Shutdown(ctx)
+	// 把最后一段还没落盘的流量计数写进去，避免重启丢数据
+	srv.flushTraffic()
 	log.Println("服务已停止")
 }
 

@@ -316,6 +316,25 @@
         <div class="desc">访客选「IPv6」时使用。填了前台才会出现 IPv6 选项，裸地址会自动补方括号。</div>
       </label>
     </div>
+    <div class="grid-2">
+      <label class="field">
+        <span>每月流量限额（GB）</span>
+        <input type="number" id="nodeQuota" min="0" step="1" placeholder="0 = 不限制">
+        <div class="desc">按测速报告累计该节点跑的流量；达到限额后主控自动停用它。</div>
+      </label>
+      <label class="field">
+        <span>每月重置日</span>
+        <input type="number" id="nodeQuotaDay" min="0" max="28" step="1" placeholder="0 = 不自动重置">
+        <div class="desc">每月几号把已用流量清零（1-28）。填 0 表示只能手动重置。</div>
+      </label>
+    </div>
+    <div class="switch-row">
+      <div>
+        <div class="sw-label">重置时自动启用</div>
+        <div class="sw-desc">到重置日清零流量后，自动把因超限停用的节点重新启用</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="nodeQuotaResume" checked><i></i></label>
+    </div>
     <div class="switch-row">
       <div><div class="sw-label">启用该节点</div></div>
       <label class="switch"><input type="checkbox" id="nodeEnabled" checked><i></i></label>

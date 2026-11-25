@@ -870,6 +870,36 @@ body.testing .site-foot { display: none; }
 
 /* 协议（IPv4 / IPv6）：出现在信息块下方、连接方式上方 */
 .proto-block { margin-top: 34px; }
+/* 首页「当前测速人数」：夹在连接信息块与 IPv4/IPv6 切换之间的空隙里，居中一行小字 */
+.live-block {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.live-block[hidden] { display: none; }
+.live-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: livePulse 2s ease-out infinite;
+}
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 var(--cyan-glow); }
+  70% { box-shadow: 0 0 0 7px rgba(62, 200, 214, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(62, 200, 214, 0); }
+}
+/* 测速进行中界面只剩表盘，这一行跟着收起，避免破坏布局 */
+body.testing .live-block { display: none; }
+/* 系统设置了「减少动态效果」就不要再闪 */
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
 .proto-block[hidden] + .mode-block { margin-top: 40px; }
 /* 主页的协议切换：GO 圆环下方、连接方式上方，居中常显 */
 #protoMain { margin-top: 24px; text-align: center; }

@@ -31,6 +31,39 @@ type Node struct {
 	// Lat / Lon 是可选的节点坐标，填了前台就能按「设置 → 距离」显示访客到节点的距离
 	Lat float64 `json:"lat,omitempty"`
 	Lon float64 `json:"lon,omitempty"`
+
+	// ---- 流量限额 ----
+	// 主控按测速报告里浏览器统计的字节数累计「该节点承载的测速流量」。
+	// 节点本身不需要改造：报告里已经带 nodeId 与 downloadBytes/uploadBytes。
+	TrafficUsed int64 `json:"trafficUsed,omitempty"` // 本计费周期已用字节
+	// TrafficLimitGB 为 0 表示不限流量。用 GiB（1024^3）作为换算基准，
+	// 与云厂商「每月 1TB」的口径不一定完全一致，这里统一按 GiB 计。
+	TrafficLimitGB float64 `json:"trafficLimitGB,omitempty"`
+	// TrafficPeriodDay 是每月重置日（1-28），0 表示不自动重置。
+	// 只允许到 28，避免 2 月没有 29-31 号导致整月漏重置。
+	TrafficPeriodDay int `json:"trafficPeriodDay,omitempty"`
+	// TrafficAutoResume 为 true 时，到重置日清零流量后自动把节点重新启用。
+	TrafficAutoResume bool `json:"trafficAutoResume,omitempty"`
+	// TrafficBlocked 表示该节点是被流量限额自动停用的（区别于后台手动停用），
+	// 用于后台区分显示，重置或调高限额后自动解除。
+	TrafficBlocked bool `json:"trafficBlocked,omitempty"`
+	// TrafficResetAt 是最近一次自动/手动重置的时间（Unix 秒），
+	// 用来判断本月是否已经重置过；0 表示从未重置。
+	TrafficResetAt int64 `json:"trafficResetAt,omitempty"`
+}
+
+// trafficLimitBytes 返回节点的字节限额，0 表示不限。
+func (n Node) trafficLimitBytes() int64 {
+	if n.TrafficLimitGB <= 0 {
+		return 0
+	}
+	return int64(n.TrafficLimitGB * float64(int64(1)<<30))
+}
+
+// trafficOver 判断节点是否已达限额。
+func (n Node) trafficOver() bool {
+	limit := n.trafficLimitBytes()
+	return limit > 0 && n.TrafficUsed >= limit
 }
 
 type Settings struct {

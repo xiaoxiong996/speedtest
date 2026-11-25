@@ -14,6 +14,8 @@
     themeBtn: $("themeBtn"),
     resultsBtn: $("resultsBtn"),
     settingsBtn: $("settingsBtn"),
+    liveBlock: $("liveBlock"),
+    liveText: $("liveText"),
     dial: $("dial"),
     arc: $("arc"),
     phase: $("phaseLabel"),
@@ -733,6 +735,9 @@
     initTheme();
     initI18n();
     buildExpDots();
+    // 首页「当前测速人数」：进页面先拉一次，之后每 10 秒刷新（主控侧判定窗口 20 秒）
+    refreshLive();
+    setInterval(refreshLive, 10000);
     fetch("/api/info", { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -1636,8 +1641,76 @@
 
   /* ---------------- 主流程 ---------------- */
 
+  /* ---------- 当前测速人数 ----------
+   * 测速流量是浏览器直接和节点跑的，主控看不到；所以测速期间由前端
+   * 每 5 秒向主控打一次心跳，主控据此统计此刻有多少人在测速、用的哪个节点。 */
+  var liveTimer = null;
+  var liveSid = "";
+
+  function liveSessionId() {
+    if (liveSid) return liveSid;
+    try { liveSid = sessionStorage.getItem("st-live-sid") || ""; } catch (e) { liveSid = ""; }
+    if (liveSid) return liveSid;
+    liveSid = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    try { sessionStorage.setItem("st-live-sid", liveSid); } catch (e) {}
+    return liveSid;
+  }
+
+  function livePing() {
+    if (!state.running) return;
+    fetch("/api/live/ping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sid: liveSessionId(),
+        nodeId: state.node ? state.node.id : ""
+      }),
+      keepalive: true
+    }).catch(function () {});
+  }
+
+  function liveStart() {
+    liveStop();
+    livePing();
+    liveTimer = setInterval(livePing, 5000);
+  }
+
+  function liveStop() {
+    if (liveTimer) {
+      clearInterval(liveTimer);
+      liveTimer = null;
+    }
+  }
+
+  // 首页展示：在线人数 + 人数最多的节点。测速中这一行被 CSS 收起，不必轮询。
+  var liveFetching = false;
+  function refreshLive() {
+    if (!els.liveBlock || state.running || liveFetching) return;
+    liveFetching = true;
+    fetch("/api/live", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        liveFetching = false;
+        if (!d || !d.ok) return;
+        var online = d.online || 0;
+        if (online <= 0) {
+          els.liveBlock.hidden = true;
+          return;
+        }
+        var top = d.nodes && d.nodes[0];
+        var text = t("liveTesting", { n: online });
+        if (top && top.name) text += t("liveUsing", { name: top.name });
+        els.liveText.textContent = text;
+        els.liveBlock.hidden = false;
+      })
+      .catch(function () { liveFetching = false; });
+  }
+
   function setRunning(on) {
     state.running = on;
+    if (on) liveStart(); else liveStop();
     els.dial.classList.toggle("testing", on);
     // 测速中只留表盘和关键数据：工具栏、连接方式、页脚说明都收起来
     document.body.classList.toggle("testing", on);
