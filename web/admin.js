@@ -3,7 +3,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
-  var state = { nodes: [], settings: null, results: [], username: "" };
+  var state = { nodes: [], settings: null, results: [], username: "", calNode: null };
 
   /* ---------- 基础 ---------- */
 
@@ -127,6 +127,17 @@
       state.username = data.username;
       $("headSite").textContent = (data.settings && data.settings.siteName) || "SpeedTest";
       $("kpiNodes").textContent = state.nodes.length;
+      // 所有节点本月流量合计：主数字按各节点自己的口径折算后的用量，副行给上下行原始量
+      var sumUsed = 0, sumDown = 0, sumUp = 0;
+      state.nodes.forEach(function (n) {
+        sumUsed += Number(n.trafficUsed) || 0;
+        sumDown += Number(n.trafficDown) || 0;
+        sumUp += Number(n.trafficUp) || 0;
+      });
+      $("kpiTraffic").textContent = (sumUsed || sumDown || sumUp) ? fmtSize(sumUsed) : "-";
+      $("kpiTrafficSub").textContent = (sumDown || sumUp)
+        ? "下行 " + fmtSize(sumDown) + " · 上行 " + fmtSize(sumUp)
+        : "暂无流量";
       $("kpiUptime").textContent = fmtUptime(data.uptime);
       $("kpiVersion").innerHTML = data.version + "<small>v</small>";
       fillSettings(state.settings);
@@ -230,6 +241,7 @@
         "<button class='a-btn small' data-act='probe' data-id='" + esc(n.id) + "'>测试</button>" +
         "<button class='a-btn small' data-act='edit' data-id='" + esc(n.id) + "'>编辑</button>" +
         (canReset ? "<button class='a-btn small' data-act='resetTraffic' data-id='" + esc(n.id) + "'>清零</button>" : "") +
+        "<button class='a-btn small' data-act='calTraffic' data-id='" + esc(n.id) + "'>校准</button>" +
         (n.local ? "" : "<button class='a-btn small danger' data-act='del' data-id='" + esc(n.id) + "'>删除</button>") +
         "</div></td></tr>";
     }).join("");
@@ -247,6 +259,7 @@
         if (act === "del") removeNode(node);
         if (act === "probe") probe(node);
         if (act === "resetTraffic") resetTraffic(node);
+        if (act === "calTraffic") openTrafficModal(node);
       });
     });
   }
@@ -259,10 +272,15 @@
     return (b / 1024).toFixed(0) + " KB";
   }
 
+  var TRAFFIC_MODE_LABEL = { sum: "上下行合计", down: "仅下行", up: "仅上行", max: "取较大值" };
+
   function trafficCell(n) {
     var used = Number(n.trafficUsed) || 0;
+    var down = Number(n.trafficDown) || 0;
+    var up = Number(n.trafficUp) || 0;
     var limitGB = Number(n.trafficLimitGB) || 0;
-    if (!limitGB && !used) return "<span class='mono dim'>不限</span>";
+    var mode = n.trafficMode || "sum";
+    if (!limitGB && !used && !down && !up) return "<span class='mono dim'>不限</span>";
     var html = "";
     if (limitGB > 0) {
       var pct = Math.min(100, (used / (limitGB * 1073741824)) * 100);
@@ -272,6 +290,13 @@
     } else {
       html += "<div class='mono'>" + fmtSize(used) + "</div>";
     }
+    // 上下行原始用量：用来核对云厂商账单，也是切换口径后重算的依据
+    if (down || up) {
+      html += "<div class='mono dim'>下行 " + fmtSize(down) + " · 上行 " + fmtSize(up) + "</div>";
+    }
+    if (mode !== "sum" && (used || down || up)) {
+      html += "<div class='mono dim'>按" + (TRAFFIC_MODE_LABEL[mode] || "合计") + "计</div>";
+    }
     if (limitGB > 0 && Number(n.trafficPeriodDay) > 0) {
       html += "<div class='mono dim'>每月 " + Number(n.trafficPeriodDay) + " 号重置" +
         (n.trafficAutoResume ? "并启用" : "") + "</div>";
@@ -279,6 +304,56 @@
     if (n.trafficBlocked) html += "<div class='mono over-text'>已达限额，已停用</div>";
     return html;
   }
+
+  // 字节转 GB 字符串：保留 4 位小数并去掉多余的 0。
+  // 不能用 toFixed(2)：1 MB 会变成 "0.00"，用户一保存就把用量清零了。
+  function bytesToGBText(bytes) {
+    var gb = (Number(bytes) || 0) / 1073741824;
+    if (!gb) return "0";
+    var s = gb.toFixed(4);
+    if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
+    return s;
+  }
+
+  /* ---------- 校准已用流量 ---------- */
+  function openTrafficModal(node) {
+    state.calNode = node;
+    $("trafficErr").textContent = "";
+    $("trafficNodeName").textContent = node.name + (node.local ? "（本机）" : "");
+    // 预填当前值（GB），方便在原值上微调
+    $("trafficDown").value = bytesToGBText(node.trafficDown);
+    $("trafficUp").value = bytesToGBText(node.trafficUp);
+    $("trafficModal").hidden = false;
+    $("trafficDown").focus();
+  }
+
+  $("trafficCancel").addEventListener("click", function () { $("trafficModal").hidden = true; });
+  $("trafficModal").addEventListener("click", function (e) {
+    if (e.target === $("trafficModal")) $("trafficModal").hidden = true;
+  });
+
+  $("trafficForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var node = state.calNode;
+    if (!node) return;
+    var down = parseFloat($("trafficDown").value) || 0;
+    var up = parseFloat($("trafficUp").value) || 0;
+    if (down < 0 || up < 0) { $("trafficErr").textContent = "用量不能为负数"; return; }
+    api("/api/admin/nodes/" + encodeURIComponent(node.id) + "/traffic/set", {
+      method: "POST",
+      body: { downGB: down, upGB: up }
+    }).then(function (d) {
+      $("trafficModal").hidden = true;
+      var n = d && d.node;
+      var msg = "流量已校准";
+      if (n && n.trafficBlocked) msg += "；已达到限额，节点已停用";
+      toast(msg);
+      loadNodes();
+      loadOverview();
+    }).catch(function (err) {
+      $("trafficErr").textContent = err.message;
+    });
+  });
 
   // 手动清零：默认顺带启用节点，否则清完了它还是停用状态，容易误以为没生效
   function resetTraffic(node) {
@@ -333,6 +408,7 @@
     $("nodeQuota").value = node && node.trafficLimitGB ? String(node.trafficLimitGB) : "";
     $("nodeQuotaDay").value = node && node.trafficPeriodDay ? String(node.trafficPeriodDay) : "";
     $("nodeQuotaResume").checked = node ? !!node.trafficAutoResume : true;
+    $("nodeQuotaMode").value = node ? (node.trafficMode || "sum") : "sum";
     $("probeBtn").style.display = "";
   }
 
@@ -356,6 +432,7 @@
       trafficLimitGB: parseFloat($("nodeQuota").value) || 0,
       trafficPeriodDay: parseInt($("nodeQuotaDay").value, 10) || 0,
       trafficAutoResume: $("nodeQuotaResume").checked,
+      trafficMode: $("nodeQuotaMode").value,
       enabled: $("nodeEnabled").checked
     };
     if (!body.name) { $("nodeErr").textContent = "请填写节点名称"; return; }
@@ -533,6 +610,7 @@
     $("setAllowSelect").checked = !!s.allowNodeSelect;
     $("setAutoPick").checked = s.autoSelectNode !== false;
     $("setShowIP").checked = !!s.showClientIP;
+    $("setShowLive").checked = !s.hideLive;
     $("setCollect").checked = !!s.collectResults;
     if ($("setProbeV4")) $("setProbeV4").value = s.probeV4 || "";
     if ($("setProbeV6")) $("setProbeV6").value = s.probeV6 || "";
@@ -570,6 +648,7 @@
       hideLogoIcon: $("setHideIcon") ? $("setHideIcon").checked : false,
       autoSelectNode: $("setAutoPick").checked,
       showClientIP: $("setShowIP").checked,
+      hideLive: !$("setShowLive").checked,
       collectResults: $("setCollect").checked,
       probeV4: $("setProbeV4") ? $("setProbeV4").value.trim() : "",
       probeV6: $("setProbeV6") ? $("setProbeV6").value.trim() : "",

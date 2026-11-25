@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.5.0"
+const appVersion = "1.5.1"
 
 var errNodeNotFound = errors.New("node not found")
 
@@ -255,13 +255,13 @@ func (s *Server) setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 }
 
 var contentTypes = map[string]string{
-	".html": "text/html; charset=utf-8",
-	".css":  "text/css; charset=utf-8",
-	".js":   "application/javascript; charset=utf-8",
-	".json": "application/json; charset=utf-8",
-	".svg":  "image/svg+xml",
-	".png":  "image/png",
-	".ico":  "image/x-icon",
+	".html":        "text/html; charset=utf-8",
+	".css":         "text/css; charset=utf-8",
+	".js":          "application/javascript; charset=utf-8",
+	".json":        "application/json; charset=utf-8",
+	".svg":         "image/svg+xml",
+	".png":         "image/png",
+	".ico":         "image/x-icon",
 	".webmanifest": "application/manifest+json",
 }
 

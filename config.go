@@ -35,7 +35,19 @@ type Node struct {
 	// ---- 流量限额 ----
 	// 主控按测速报告里浏览器统计的字节数累计「该节点承载的测速流量」。
 	// 节点本身不需要改造：报告里已经带 nodeId 与 downloadBytes/uploadBytes。
-	TrafficUsed int64 `json:"trafficUsed,omitempty"` // 本计费周期已用字节
+	//
+	// TrafficDown / TrafficUp 是原始累计（下行、上行分别记），TrafficUsed 是按
+	// TrafficMode 折算出的「计费流量」，限额判定只用 TrafficUsed。
+	// 分开存是为了：切口径时能立刻重算，后台也能展示上下行明细。
+	TrafficDown int64 `json:"trafficDown,omitempty"`
+	TrafficUp   int64 `json:"trafficUp,omitempty"`
+	TrafficUsed int64 `json:"trafficUsed,omitempty"` // 本计费周期已用字节（按统计口径折算）
+	// TrafficMode 是流量统计口径：
+	//   ""/sum = 上下行相加（默认）
+	//   down   = 只统计下行
+	//   up     = 只统计上行
+	//   max    = 每次测速取上下行中较大的那个，逐次累加
+	TrafficMode string `json:"trafficMode,omitempty"`
 	// TrafficLimitGB 为 0 表示不限流量。用 GiB（1024^3）作为换算基准，
 	// 与云厂商「每月 1TB」的口径不一定完全一致，这里统一按 GiB 计。
 	TrafficLimitGB float64 `json:"trafficLimitGB,omitempty"`
@@ -66,15 +78,60 @@ func (n Node) trafficOver() bool {
 	return limit > 0 && n.TrafficUsed >= limit
 }
 
+// normalizeTrafficMode 把统计口径收敛到 4 个合法值，未知值按「上下行相加」。
+func normalizeTrafficMode(m string) string {
+	switch strings.ToLower(strings.TrimSpace(m)) {
+	case "down", "download":
+		return "down"
+	case "up", "upload":
+		return "up"
+	case "max", "peak":
+		return "max"
+	default:
+		return "sum"
+	}
+}
+
+// chargeTraffic 是按口径折算单次测速应计入的字节数。
+// max 口径按「这一次测速里上下行较大的那个」计，而不是累计后取大，否则
+// 长期来看等于两个方向都算了一遍。
+func chargeTraffic(mode string, down, up int64) int64 {
+	if down < 0 {
+		down = 0
+	}
+	if up < 0 {
+		up = 0
+	}
+	switch normalizeTrafficMode(mode) {
+	case "down":
+		return down
+	case "up":
+		return up
+	case "max":
+		if down > up {
+			return down
+		}
+		return up
+	default:
+		return down + up
+	}
+}
+
+// recalcTrafficUsed 按当前口径用原始上下行重算计费流量。
+// 切换口径或手动校准后必须调用，否则显示与限额判定会对不上。
+func (n *Node) recalcTrafficUsed() {
+	n.TrafficUsed = chargeTraffic(n.TrafficMode, n.TrafficDown, n.TrafficUp)
+}
+
 type Settings struct {
-	SiteName        string `json:"siteName"`
-	Tagline         string `json:"tagline"`
+	SiteName string `json:"siteName"`
+	Tagline  string `json:"tagline"`
 	// IconURL 是后台上传的自定义站点图标路径（如 /site-icon?v=123）。
 	// 为空时用内置默认 favicon.svg；上传接口会写入带版本号的路径以绕过浏览器缓存。
-	IconURL         string `json:"iconUrl,omitempty"`
+	IconURL string `json:"iconUrl,omitempty"`
 	// HideLogoIcon：顶部 logo 只显示文字，不显示任何图标（含默认圆环与自定义图标）。
 	// 用于纯文字品牌；勾选后首屏就是纯文字，刷新也不会闪出图标。
-	HideLogoIcon    bool   `json:"hideLogoIcon,omitempty"`
+	HideLogoIcon bool `json:"hideLogoIcon,omitempty"`
 	// TitleSuffix 是标签页标题里站点名后面的文字（如「网络测速」/「Speed Test」），
 	// 留空时按当前界面语言使用内置默认文案。
 	TitleSuffix     string `json:"titleSuffix,omitempty"`
@@ -87,10 +144,14 @@ type Settings struct {
 	AllowNodeSelect bool   `json:"allowNodeSelect"`
 	// AutoSelectNode：前台是否按实测延迟自动选最低的节点；
 	// 关闭后按后台节点列表的顺序来（默认节点优先），不自动跳。
-	AutoSelectNode  bool   `json:"autoSelectNode"`
-	ShowClientIP    bool   `json:"showClientIP"`
-	CollectResults  bool   `json:"collectResults"`
-	FooterNote      string `json:"footerNote"`
+	AutoSelectNode bool `json:"autoSelectNode"`
+	ShowClientIP   bool `json:"showClientIP"`
+	// HideLive：是否隐藏首页的「当前 N 人正在测速 · 使用 XX 节点」。
+	// 用「隐藏」而不是「显示」作字段名，老配置没有这个键时零值就是显示，
+	// 升级后行为不变；老版后台页面保存设置（不带该字段）也不会把它误关掉。
+	HideLive       bool   `json:"hideLive,omitempty"`
+	CollectResults bool   `json:"collectResults"`
+	FooterNote     string `json:"footerNote"`
 	// AdminPath 是后台入口的隐藏路径段：只有 /<AdminPath> 能打开后台页面，
 	// /admin 与 /admin.html 都返回 404。可在后台「站点设置」里随时修改。
 	AdminPath string `json:"adminPath"`
@@ -343,6 +404,19 @@ func NewStore(path string) (*Store, error) {
 		if json.Unmarshal(b, &probe) == nil {
 			if _, ok := probe.Settings["autoSelectNode"]; !ok {
 				s.cfg.Settings.AutoSelectNode = true
+				changed = true
+			}
+		}
+		// 1.5.1 起流量拆成上下行分别累计。老配置只有 trafficUsed，
+		// 直接归到下行，避免下次保存节点重算时把历史用量清零。
+		for i := range s.cfg.Nodes {
+			n := &s.cfg.Nodes[i]
+			if n.TrafficDown == 0 && n.TrafficUp == 0 && n.TrafficUsed > 0 {
+				n.TrafficDown = n.TrafficUsed
+				changed = true
+			}
+			if n.TrafficMode != "" && normalizeTrafficMode(n.TrafficMode) != n.TrafficMode {
+				n.TrafficMode = normalizeTrafficMode(n.TrafficMode)
 				changed = true
 			}
 		}

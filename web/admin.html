@@ -58,6 +58,7 @@
     <div class="tab-panel" id="panel-overview">
       <div class="kpis">
         <div class="kpi"><div class="kpi-label">节点数</div><div class="kpi-value" id="kpiNodes">-</div></div>
+        <div class="kpi"><div class="kpi-label">本月节点流量</div><div class="kpi-value" id="kpiTraffic">-</div><div class="kpi-sub" id="kpiTrafficSub"></div></div>
         <div class="kpi"><div class="kpi-label">测速记录</div><div class="kpi-value" id="kpiResults">-</div></div>
         <div class="kpi"><div class="kpi-label">运行时长</div><div class="kpi-value" id="kpiUptime">-</div></div>
         <div class="kpi"><div class="kpi-label">版本</div><div class="kpi-value" id="kpiVersion">-</div></div>
@@ -201,6 +202,10 @@
           <label class="switch"><input type="checkbox" id="setShowIP"><i></i></label>
         </div>
         <div class="switch-row">
+          <div><div class="sw-label">显示当前测速人数</div><div class="sw-desc">首页展示「N 人正在测速 · 使用 XX 节点」；关闭后前端不再统计也不再上报心跳</div></div>
+          <label class="switch"><input type="checkbox" id="setShowLive"><i></i></label>
+        </div>
+        <div class="switch-row">
           <div><div class="sw-label">记录测速结果</div><div class="sw-desc">在概览页查看最近 300 条测速记录</div></div>
           <label class="switch"><input type="checkbox" id="setCollect"><i></i></label>
         </div>
@@ -328,6 +333,16 @@
         <div class="desc">每月几号把已用流量清零（1-28）。填 0 表示只能手动重置。</div>
       </label>
     </div>
+    <label class="field">
+      <span>流量统计口径</span>
+      <select id="nodeQuotaMode">
+        <option value="sum">上下行合计（下行 + 上行）</option>
+        <option value="down">只统计下行</option>
+        <option value="up">只统计上行</option>
+        <option value="max">上下行取较大值（每次测速取大后累加）</option>
+      </select>
+      <div class="desc">决定「本月流量」怎么算：限额比较只用按该口径折算出的用量，上下行原始数据仍分别保留。</div>
+    </label>
     <div class="switch-row">
       <div>
         <div class="sw-label">重置时自动启用</div>
@@ -344,6 +359,31 @@
       <button class="a-btn small" id="probeBtn" type="button">连通性测试</button>
       <button class="a-btn small" id="nodeCancel" type="button">取消</button>
       <button class="a-btn primary small" type="submit">保存</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-back" id="trafficModal" hidden>
+  <form class="modal-box" id="trafficForm" style="width:min(480px,100%)">
+    <h3>校准已用流量</h3>
+    <div class="mono dim" id="trafficNodeName" style="margin:-8px 0 14px"></div>
+    <div class="grid-2">
+      <label class="field">
+        <span>已用下行（GB）</span>
+        <input type="number" id="trafficDown" min="0" step="0.001" placeholder="如 12.5">
+      </label>
+      <label class="field">
+        <span>已用上行（GB）</span>
+        <input type="number" id="trafficUp" min="0" step="0.001" placeholder="如 3.2">
+      </label>
+    </div>
+    <div class="desc" style="margin-bottom:14px">
+      按云厂商账单填写本周期实际用量，保存后直接覆盖当前统计值，并按节点「统计口径」重新折算限额用量。填 0 等于清零。
+    </div>
+    <div class="err" id="trafficErr"></div>
+    <div class="modal-foot">
+      <button class="a-btn small" id="trafficCancel" type="button">取消</button>
+      <button class="a-btn primary small" type="submit">保存校准</button>
     </div>
   </form>
 </div>

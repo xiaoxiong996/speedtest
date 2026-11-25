@@ -96,6 +96,14 @@ func (s *Server) apiRouter(w http.ResponseWriter, r *http.Request) {
 			})(w, r)
 			return
 		}
+		// 手动校准已用流量：POST /api/admin/nodes/{id}/traffic/set
+		if strings.HasSuffix(rest, "/traffic/set") && r.Method == http.MethodPost {
+			id := strings.TrimSuffix(rest, "/traffic/set")
+			s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+				s.handleSetNodeTraffic(w, r, id)
+			})(w, r)
+			return
+		}
 		if r.Method == http.MethodPut || r.Method == http.MethodDelete {
 			s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 				s.handleNodeByID(w, r, rest)
@@ -124,6 +132,7 @@ func publicSettings(st Settings) map[string]any {
 		"allowNodeSelect": st.AllowNodeSelect,
 		"autoSelectNode":  st.AutoSelectNode,
 		"showClientIP":    st.ShowClientIP,
+		"hideLive":        st.HideLive,
 		"footerNote":      st.FooterNote,
 		"probeV4":         st.ProbeV4,
 		"probeV6":         st.ProbeV6,
@@ -211,8 +220,8 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"city":      meta.City,
 		"lat":       meta.Lat,
 		// 是否管理员登录：前台据此决定要不要展示节点地址等敏感信息
-		"admin":     s.isAuthed(r),
-		"lon":       meta.Lon,
+		"admin": s.isAuthed(r),
+		"lon":   meta.Lon,
 		// 本机地址：前台切换 IPv4 / IPv6 时用它补探访客在另一协议下的地址
 		"addrs":    map[string][]string{"v4": addrs4, "v6": addrs6},
 		"settings": publicSettings(cfg.Settings),
@@ -282,13 +291,13 @@ func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	cfg := s.store.Get()
 	var payload struct {
-		NodeID      string  `json:"nodeId"`
-		NodeName    string  `json:"nodeName"`
-		Ping        float64 `json:"ping"`
-		Jitter      float64 `json:"jitter"`
-		Download    float64 `json:"download"`
-		Upload      float64 `json:"upload"`
-		Loss        float64 `json:"loss"`
+		NodeID   string  `json:"nodeId"`
+		NodeName string  `json:"nodeName"`
+		Ping     float64 `json:"ping"`
+		Jitter   float64 `json:"jitter"`
+		Download float64 `json:"download"`
+		Upload   float64 `json:"upload"`
+		Loss     float64 `json:"loss"`
 		// 带载延迟（下载 / 上传进行中测得的延迟）
 		DownLat     float64 `json:"downLat"`
 		UpLat       float64 `json:"upLat"`
@@ -331,7 +340,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	// 节点流量统计放在「是否收集报告」之前：关闭报告收集只是不留历史记录，
 	// 流量限额仍然要算，否则一关收集限额就形同虚设。
-	s.traffic.add(strings.TrimSpace(payload.NodeID), payload.DownloadBytes+payload.UploadBytes)
+	s.traffic.add(strings.TrimSpace(payload.NodeID), payload.DownloadBytes, payload.UploadBytes)
 	if !cfg.Settings.CollectResults {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "skipped": true})
 		return
@@ -712,6 +721,8 @@ type nodePayload struct {
 	TrafficLimitGB    float64 `json:"trafficLimitGB"`
 	TrafficPeriodDay  int     `json:"trafficPeriodDay"`
 	TrafficAutoResume bool    `json:"trafficAutoResume"`
+	// 统计口径：sum（上下行合计，默认）/ down / up / max
+	TrafficMode string `json:"trafficMode"`
 }
 
 func normalizeNodeURL(raw string) string {
@@ -856,18 +867,19 @@ func validateNode(p nodePayload) (Node, string) {
 		return Node{}, "节点名称不能为空"
 	}
 	n := Node{
-		ID:       strings.TrimSpace(p.ID),
-		Name:     name,
-		Sponsor:  strings.TrimSpace(p.Sponsor),
-		Location: strings.TrimSpace(p.Location),
-		URL:      normalizeNodeURL(p.URL),
-		URL6:     normalizeNodeURL(p.URL6),
-		Enabled:  p.Enabled,
-		Lat:      p.Lat,
-		Lon:      p.Lon,
+		ID:                strings.TrimSpace(p.ID),
+		Name:              name,
+		Sponsor:           strings.TrimSpace(p.Sponsor),
+		Location:          strings.TrimSpace(p.Location),
+		URL:               normalizeNodeURL(p.URL),
+		URL6:              normalizeNodeURL(p.URL6),
+		Enabled:           p.Enabled,
+		Lat:               p.Lat,
+		Lon:               p.Lon,
 		TrafficLimitGB:    math.Round(p.TrafficLimitGB*100) / 100,
 		TrafficPeriodDay:  p.TrafficPeriodDay,
 		TrafficAutoResume: p.TrafficAutoResume,
+		TrafficMode:       normalizeTrafficMode(p.TrafficMode),
 	}
 	// 流量限额：负数按「不限」处理，上限 100 万 GB，防止误填天文数字把界面撑坏
 	if n.TrafficLimitGB < 0 {
@@ -898,6 +910,30 @@ func validateNode(p nodePayload) (Node, string) {
 	return n, ""
 }
 
+// preserveNodeRuntime 把服务端维护的运行时字段从旧节点带到新节点上：
+// 编辑表单不提交这些值，直接整条替换会把累计流量、超限标记清空。
+// 同时按新口径/新限额重新判定一次是否超限。
+func preserveNodeRuntime(old, n Node) Node {
+	n.ID = old.ID
+	n.Local = old.Local
+	n.TrafficUsed = old.TrafficUsed
+	n.TrafficDown = old.TrafficDown
+	n.TrafficUp = old.TrafficUp
+	n.TrafficResetAt = old.TrafficResetAt
+	n.TrafficBlocked = old.TrafficBlocked
+	// 改了统计口径时用原始上下行重算，否则显示与限额判定对不上
+	n.recalcTrafficUsed()
+	if n.trafficOver() {
+		// 调低限额或换成更严的口径后立即生效：标记超限并停用
+		n.TrafficBlocked = true
+		n.Enabled = false
+	} else if n.TrafficBlocked {
+		// 调高限额或清空限额后自动解除超限标记，否则用户会以为改不动
+		n.TrafficBlocked = false
+	}
+	return n
+}
+
 func (s *Server) handleSaveNode(w http.ResponseWriter, r *http.Request) {
 	var p nodePayload
 	if err := readJSON(r, &p); err != nil {
@@ -916,15 +952,7 @@ func (s *Server) handleSaveNode(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Update(func(c *Config) error {
 		for i := range c.Nodes {
 			if c.Nodes[i].ID == n.ID {
-				n.Local = c.Nodes[i].Local
-				// 累计量由服务端维护，编辑表单不提交这些值
-				n.TrafficUsed = c.Nodes[i].TrafficUsed
-				n.TrafficResetAt = c.Nodes[i].TrafficResetAt
-				n.TrafficBlocked = c.Nodes[i].TrafficBlocked
-				// 调高限额或清空限额后，之前的超限停用自动解除，否则用户会以为改不动
-				if n.TrafficBlocked && !n.trafficOver() {
-					n.TrafficBlocked = false
-				}
+				n = preserveNodeRuntime(c.Nodes[i], n)
 				c.Nodes[i] = n
 				return nil
 			}
@@ -946,6 +974,23 @@ func (s *Server) handleResetNodeTraffic(w http.ResponseWriter, r *http.Request, 
 	// 允许空 body：不带参数就是只清零、不改启用状态
 	_ = readJSON(r, &body)
 	n, ok := s.resetNodeTraffic(strings.TrimSpace(id), body.Resume)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "节点不存在"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "node": n})
+}
+
+// handleSetNodeTraffic 手动校准某节点本周期已用流量（按 GB 填写，直接覆盖）。
+// 用于对齐云厂商账单、补录历史用量；校准后立刻重新判定是否超限。
+func (s *Server) handleSetNodeTraffic(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		DownGB float64 `json:"downGB"`
+		UpGB   float64 `json:"upGB"`
+	}
+	// 允许空 body：不带参数就等于把上下行都清零
+	_ = readJSON(r, &body)
+	n, ok := s.setNodeTraffic(strings.TrimSpace(id), gbToBytes(body.DownGB), gbToBytes(body.UpGB))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "节点不存在"})
 		return
@@ -999,7 +1044,7 @@ func (s *Server) handleNodeByID(w http.ResponseWriter, r *http.Request, id strin
 		if err := s.store.Update(func(c *Config) error {
 			for i := range c.Nodes {
 				if c.Nodes[i].ID == id {
-					n.Local = c.Nodes[i].Local
+					n = preserveNodeRuntime(c.Nodes[i], n)
 					c.Nodes[i] = n
 					found = true
 					return nil
@@ -1129,19 +1174,19 @@ func publicResult(r Result, cfg Config) map[string]any {
 		ipVersion = fam
 	}
 	return map[string]any{
-		"id":          r.ID,
-		"time":        r.Time.Unix(),
-		"ip":          ip,
-		"ipVersion":   ipVersion,
-		"isp":         r.ISP,
-		"ispEn":       r.ISPEn,
-		"ping":        r.Ping,
-		"jitter":      r.Jitter,
-		"download":    r.Download,
-		"upload":      r.Upload,
-		"loss":        r.Loss,
-		"downLat":     r.DownLat,
-		"upLat":       r.UpLat,
+		"id":        r.ID,
+		"time":      r.Time.Unix(),
+		"ip":        ip,
+		"ipVersion": ipVersion,
+		"isp":       r.ISP,
+		"ispEn":     r.ISPEn,
+		"ping":      r.Ping,
+		"jitter":    r.Jitter,
+		"download":  r.Download,
+		"upload":    r.Upload,
+		"loss":      r.Loss,
+		"downLat":   r.DownLat,
+		"upLat":     r.UpLat,
 		// 体验评级门槛随报告下发，报告页据此算 5 档，和首页保持一致
 		"ratingCfg":   cfg.Settings.Rating,
 		"connections": r.Connections,

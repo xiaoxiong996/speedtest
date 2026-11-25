@@ -17,32 +17,41 @@ var errNoChange = errors.New("无需保存")
 
 type trafficMeter struct {
 	mu      sync.Mutex
-	pending map[string]int64
+	pending map[string]trafficDelta
+}
+
+// trafficDelta 是一次或多次测速的上下行增量。
+type trafficDelta struct {
+	Down int64
+	Up   int64
 }
 
 func newTrafficMeter() *trafficMeter {
-	return &trafficMeter{pending: make(map[string]int64)}
+	return &trafficMeter{pending: make(map[string]trafficDelta)}
 }
 
-// add 把一次测速的流量记到节点名下（字节）。
-func (m *trafficMeter) add(nodeID string, n int64) {
-	if nodeID == "" || n <= 0 {
+// add 把一次测速的上下行流量记到节点名下（字节）。
+func (m *trafficMeter) add(nodeID string, down, up int64) {
+	if nodeID == "" || (down <= 0 && up <= 0) {
 		return
 	}
 	m.mu.Lock()
-	m.pending[nodeID] += n
+	d := m.pending[nodeID]
+	d.Down += down
+	d.Up += up
+	m.pending[nodeID] = d
 	m.mu.Unlock()
 }
 
 // take 取出并清空待落盘计数。
-func (m *trafficMeter) take() map[string]int64 {
+func (m *trafficMeter) take() map[string]trafficDelta {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.pending) == 0 {
 		return nil
 	}
 	out := m.pending
-	m.pending = make(map[string]int64)
+	m.pending = make(map[string]trafficDelta)
 	return out
 }
 
@@ -69,7 +78,10 @@ func (s *Server) flushTraffic() {
 			if !ok {
 				continue
 			}
-			n.TrafficUsed += d
+			n.TrafficDown += d.Down
+			n.TrafficUp += d.Up
+			// 按该节点当前口径折算本次计入的流量，而不是简单累加总和
+			n.TrafficUsed += chargeTraffic(n.TrafficMode, d.Down, d.Up)
 			hit = true
 			limit := n.trafficLimitBytes()
 			if limit > 0 && !n.TrafficBlocked && n.TrafficUsed >= limit {
@@ -119,6 +131,8 @@ func (s *Server) maybeResetTraffic() {
 				continue
 			}
 			n.TrafficUsed = 0
+			n.TrafficDown = 0
+			n.TrafficUp = 0
 			n.TrafficResetAt = point.Unix()
 			n.TrafficBlocked = false
 			changed = true
@@ -152,6 +166,8 @@ func (s *Server) resetNodeTraffic(id string, resume bool) (Node, bool) {
 			}
 			found = true
 			c.Nodes[i].TrafficUsed = 0
+			c.Nodes[i].TrafficDown = 0
+			c.Nodes[i].TrafficUp = 0
 			c.Nodes[i].TrafficBlocked = false
 			c.Nodes[i].TrafficResetAt = time.Now().Unix()
 			if resume {
@@ -170,6 +186,78 @@ func (s *Server) resetNodeTraffic(id string, resume bool) (Node, bool) {
 	}
 	if found {
 		s.traffic.discard(id)
+	}
+	return out, found
+}
+
+// gbToBytes 把后台填写的 GB（按 GiB 口径）换算成字节，负数与异常大值都收口。
+func gbToBytes(gb float64) int64 {
+	if gb <= 0 {
+		return 0
+	}
+	if gb > 1e9 {
+		gb = 1e9
+	}
+	return int64(gb * float64(int64(1)<<30))
+}
+
+// setNodeTraffic 手动校准某节点本周期已用流量（对齐云厂商账单、补录历史用量）。
+// down/up 为字节，直接覆盖原始上下行累计，再按当前统计口径重算 TrafficUsed。
+// 校准后立即重新判定限额：超了就自动停用，校准到限额以下则解除超限标记。
+func (s *Server) setNodeTraffic(id string, down, up int64) (Node, bool) {
+	var out Node
+	found := false
+	blocked := ""
+	resumed := ""
+	err := s.store.Update(func(c *Config) error {
+		for i := range c.Nodes {
+			if c.Nodes[i].ID != id {
+				continue
+			}
+			found = true
+			if down < 0 {
+				down = 0
+			}
+			if up < 0 {
+				up = 0
+			}
+			n := &c.Nodes[i]
+			n.TrafficDown = down
+			n.TrafficUp = up
+			n.recalcTrafficUsed()
+			if n.trafficOver() {
+				if !n.TrafficBlocked {
+					blocked = n.Name
+				}
+				n.TrafficBlocked = true
+				n.Enabled = false
+			} else if n.TrafficBlocked {
+				// 校准到限额以下：解除超限标记并恢复启用。
+				// 校准是纠错操作，用户填小值就是想让节点重新可用。
+				n.TrafficBlocked = false
+				n.Enabled = true
+				resumed = n.Name
+			}
+			out = *n
+			break
+		}
+		if !found {
+			return errNoChange
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errNoChange) {
+		log.Printf("校准节点流量失败: %v", err)
+	}
+	if found {
+		// 丢掉还没落盘的增量，否则下一次 flush 会把校准前的流量又加回去
+		s.traffic.discard(id)
+	}
+	if blocked != "" {
+		log.Printf("节点 %s 校准后已达流量限额，已自动停用", blocked)
+	}
+	if resumed != "" {
+		log.Printf("节点 %s 校准后已低于限额，已自动恢复启用", resumed)
 	}
 	return out, found
 }

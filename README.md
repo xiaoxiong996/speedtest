@@ -17,7 +17,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.5.0 --url https://speed.example.com
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.5.1 --url https://speed.example.com
 ```
 
 不加任何参数则进入交互式安装（依次询问域名、端口、后台路径、密码）：
@@ -54,7 +54,7 @@ sudo bash install.sh
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install-node.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.5.0 --port 8443 \
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.5.1 --port 8443 \
       --domain node.example.com --host node.example.com --origin https://speed.example.com
 ```
 
@@ -73,11 +73,11 @@ curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/
 
 ```bash
 # 主控
-cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.5.0|' .env
+cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.5.1|' .env
 docker compose pull && docker compose up -d
 
 # 节点（certs/ 不动，证书继续用）
-cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.5.0|' .env
+cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.5.1|' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 

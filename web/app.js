@@ -91,7 +91,8 @@
       gaugeMax: 1000,
       defaultNode6: "",
       allowNodeSelect: true,
-      showClientIP: true
+      showClientIP: true,
+      hideLive: false
     },
     nodes: [],
     node: null,
@@ -735,8 +736,7 @@
     initTheme();
     initI18n();
     buildExpDots();
-    // 首页「当前测速人数」：进页面先拉一次，之后每 10 秒刷新（主控侧判定窗口 20 秒）
-    refreshLive();
+    // 首页「当前测速人数」：等 /api/info 拿到后台开关后再拉第一次，避免关掉时闪一下
     setInterval(refreshLive, 10000);
     fetch("/api/info", { cache: "no-store" })
       .then(function (r) { return r.json(); })
@@ -772,6 +772,7 @@
         syncPath();
         renderClient();
         renderSettings();
+        refreshLive();
         // 选了另一种协议时，先补探该协议下的访客地址
         probeClient(state.family).then(function () {
           loadPreferredNode();
@@ -851,6 +852,8 @@
     els.foot.hidden = !s.footerNote;
     renderClient();
     renderServer();
+    // 「当前测速人数」是否显示由后台开关控制：关掉就立刻收起并停止后续轮询
+    if (state.settings.hideLive && els.liveBlock) els.liveBlock.hidden = true;
   }
 
   // 运营商名中英双语：中文界面用「中国电信」，英文界面用 China Telecom
@@ -1672,6 +1675,8 @@
   }
 
   function liveStart() {
+    // 后台关掉「显示当前测速人数」后就不必再打心跳了
+    if (state.settings.hideLive) return;
     liveStop();
     livePing();
     liveTimer = setInterval(livePing, 5000);
@@ -1687,7 +1692,13 @@
   // 首页展示：在线人数 + 人数最多的节点。测速中这一行被 CSS 收起，不必轮询。
   var liveFetching = false;
   function refreshLive() {
-    if (!els.liveBlock || state.running || liveFetching) return;
+    if (!els.liveBlock) return;
+    // 后台可以整体关掉这个展示：关掉后直接隐藏，也不再请求 /api/live
+    if (state.settings.hideLive) {
+      els.liveBlock.hidden = true;
+      return;
+    }
+    if (state.running || liveFetching) return;
     liveFetching = true;
     fetch("/api/live", { cache: "no-store" })
       .then(function (r) { return r.json(); })
