@@ -39,6 +39,48 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+  # 给非 Docker / 非 root 部署用：产出两个静态二进制，挂到 Release 附件上
+  binary:
+    name: 构建二进制（${{ matrix.arch }}）
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.11"
+
+      - name: 编译（静态链接，不依赖 glibc/musl）
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          OUT="speedtest-linux-${{ matrix.arch }}"
+          go build -trimpath -ldflags "-s -w" -o "$OUT" .
+          chmod +x "$OUT"
+          ls -lh "$OUT"
+          # arm64 二进制在 x86 runner 上跑不了，只对 amd64 做冒烟验证
+          if [ "${{ matrix.arch }}" = "amd64" ]; then ./"$OUT" --version; fi
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedtest-linux-${{ matrix.arch }}
+          path: speedtest-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -104,7 +146,7 @@ jobs:
 
   # 构建成功后自动创建 Release（仅推 tag 时），附上镜像地址与一键安装命令
   release:
-    needs: build-and-push
+    needs: [build-and-push, binary]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -113,10 +155,17 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 取回二进制
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: dist/speedtest-linux-*
           body: |
             ## 镜像
 
@@ -140,3 +189,21 @@ jobs:
             ```
 
             卸载脚本分别在 `deploy/uninstall.sh`（主控）与 `deploy/uninstall-node.sh`（节点）。
+
+            ## 不用 Docker / 不用 root
+
+            附件的 `speedtest-linux-amd64` / `speedtest-linux-arm64` 是静态编译的单文件二进制，
+            网页与控制台已内嵌，拷过去就能跑。脚本会装成 systemd **用户**服务（`systemctl --user`），
+            全程不需要 root，端口用 ≥1024 的即可：
+
+            ```bash
+            # 主控（默认监听 127.0.0.1:3333，前面自己接 HTTPS 反代）
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/deploy/install-local.sh \
+              | bash -s -- --mode controller --port 3333
+
+            # 测速节点（监听 8443，自动签发证书）
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/deploy/install-local.sh \
+              | bash -s -- --mode node --domain node1.example.com --origin https://speed.example.com
+            ```
+
+            卸载：`bash deploy/uninstall-local.sh --mode controller|node`（加 `--purge` 连数据一起删）。

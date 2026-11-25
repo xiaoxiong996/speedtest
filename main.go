@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"log"
@@ -21,7 +22,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.4.4"
+const appVersion = "1.4.5"
 
 var errNodeNotFound = errors.New("node not found")
 
@@ -41,6 +42,15 @@ type Server struct {
 func main() {
 	log.SetFlags(log.LstdFlags)
 	initGarbage()
+
+	// -v / --version：安装脚本与排障用，打印后直接退出，不碰任何配置与端口
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "-v", "--version", "version":
+			fmt.Printf("speedtest %s\n", appVersion)
+			return
+		}
+	}
 
 	// 节点模式：完全独立的纯测速服务，不创建数据目录、不加载 config.json、
 	// 不提供任何后台/web 接口，配置只来自环境变量且在启动时一次性固化。
