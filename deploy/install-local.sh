@@ -51,6 +51,7 @@ PREFIX=""
 PANEL_PATH=""
 PANEL_USER=""
 PANEL_PASS=""
+SETUP_CODE=""
 CF_TOKEN=""
 EMAIL=""
 STAGING="0"
@@ -80,6 +81,7 @@ while [ $# -gt 0 ]; do
     --panel-path) PANEL_PATH="${2:-}"; shift 2 ;;
     --panel-user) PANEL_USER="${2:-}"; shift 2 ;;
     --panel-pass) PANEL_PASS="${2:-}"; shift 2 ;;
+    --setup-code) SETUP_CODE="${2:-}"; shift 2 ;;
     --email)      EMAIL="${2:-}"; shift 2 ;;
     --staging)    STAGING="1"; shift ;;
     --no-start)   START="0"; shift ;;
@@ -100,6 +102,7 @@ while [ $# -gt 0 ]; do
   --host / --cidr / --prefix      节点可选：允许的 Host、访客 IP 段、路径前缀
   --cf-token <令牌>               节点可选，Cloudflare API Token
   --panel-path / --panel-user / --panel-pass   节点可选，启用面板
+  --setup-code <码>               节点可选，指定面板一次性安装码（不给就随机生成并打印）
   --email <邮箱> / --staging      节点可选：证书邮箱、用测试环境
   --no-start                      只写文件不启动
 USAGE
@@ -226,6 +229,7 @@ NODE_PATH_PREFIX=$PREFIX
 NODE_PANEL_PATH=$PANEL_PATH
 NODE_PANEL_USER=$PANEL_USER
 NODE_PANEL_PASS=$PANEL_PASS
+NODE_SETUP_CODE=$SETUP_CODE
 NODE_HTTP_BOOTSTRAP_MINUTES=10
 CF_DNS_API_TOKEN=$CF_TOKEN
 EOF
@@ -310,5 +314,15 @@ else
   echo "  首次签发证书可能需要一两分钟，进度看日志"
   if [ -n "$PANEL_PATH" ]; then
     echo "  节点面板  https://$DOMAIN:$PORT/$PANEL_PATH"
+    CODE=""
+    if command -v journalctl >/dev/null 2>&1; then
+      CODE="$(journalctl --user -u "$SERVICE" --no-pager -n 200 2>/dev/null \
+        | sed -n 's/.*安装码：\([A-Za-z0-9]\{4,\}\).*/\1/p' | tail -1)"
+    fi
+    if [ -n "$CODE" ]; then
+      echo "  安装码    $CODE   （首次登录面板时填，登录成功一次后自动失效）"
+    else
+      echo "  安装码    用这条命令看：journalctl --user -u $SERVICE --no-pager | grep 安装码"
+    fi
   fi
 fi
