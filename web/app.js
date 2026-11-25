@@ -1843,9 +1843,9 @@
       setDial(fmtSpeed(dl), speedUnit(), "", true);
       rampProgress(100, 500);   // 收尾也走一小段，避免最后一格"啪"地跳满
       showResult(ping, dl, ul);
-      // 流量已随报告一起报给主控，清掉中断补报的计数，避免重复计入
-      partialClear();
-      reportResult(ping, dl, ul, dlBytes, ulBytes, buildTimeline(ping, dlRun.samples, ulRun.samples), dlLat, ulLat);
+      // 报告里只报「还没补报过」的那部分：中断或切后台时已经补报过的字节不再重复计
+      var rest = partialRest(dlBytes, ulBytes);
+      reportResult(ping, dl, ul, rest.down, rest.up, buildTimeline(ping, dlRun.samples, ulRun.samples), dlLat, ulLat);
     } catch (e) {
       // 中途停止 / 出错 / 节点断流：把已经跑掉的流量补报掉，别让节点白掉带宽
       partialFlush();
@@ -2012,12 +2012,14 @@
      不管这轮测速有没有生成报告，都占着节点带宽。用户中途点停止、关页面、切网络时，
      这里把「已经跑掉的那部分」单独补报给主控（只结流量、不出报告），
      否则点一下停止就能白用节点流量，限额也就形同虚设。 */
-  var partial = { nodeId: "", down: 0, up: 0, active: false };
+  var partial = { nodeId: "", down: 0, up: 0, active: false, sentDown: 0, sentUp: 0 };
 
   function partialStart(nodeId) {
     partial.nodeId = nodeId || "";
     partial.down = 0;
     partial.up = 0;
+    partial.sentDown = 0;
+    partial.sentUp = 0;
     partial.active = !!partial.nodeId;
   }
 
@@ -2034,15 +2036,28 @@
     partial.active = false;
     partial.down = 0;
     partial.up = 0;
+    partial.sentDown = 0;
+    partial.sentUp = 0;
   }
 
-  // 把已跑掉的流量补报出去，返回是否真的发了请求
+  // 出报告前算「还没补报过的字节」：页面若中途被切到后台/bfcache 已经补报过一段，
+  // 报告里只报剩下的部分，否则同一段流量会被算两次。
+  function partialRest(down, up) {
+    var d = Math.round(down || 0) - partial.sentDown;
+    var u = Math.round(up || 0) - partial.sentUp;
+    partialClear();
+    return { down: d > 0 ? d : 0, up: u > 0 ? u : 0 };
+  }
+
+  // 把还没报过的流量补报出去，返回是否真的发了请求。
+  // 用「已补报水位」做差：页面被 bfcache 恢复后继续测速时不会重复计。
   function partialFlush() {
     var nodeId = partial.nodeId;
-    var down = Math.round(partial.down || 0);
-    var up = Math.round(partial.up || 0);
-    partialClear();
+    var down = Math.round(partial.down || 0) - partial.sentDown;
+    var up = Math.round(partial.up || 0) - partial.sentUp;
     if (!nodeId || (down <= 0 && up <= 0)) return false;
+    partial.sentDown += down;
+    partial.sentUp += up;
     var body = JSON.stringify({
       nodeId: nodeId,
       partial: true,
@@ -2066,10 +2081,11 @@
     return true;
   }
 
-  // 关页面 / 跳走时补报。注意 bfcache 恢复（persisted）的页面还会继续跑，不能报，
-  // 不然同一段流量会被补报一次、又随报告报一次。
-  window.addEventListener("pagehide", function (e) {
-    if (e && e.persisted) return;
+  // 关页面 / 切后台 / 跳走时补报。
+  // 不能按 e.persisted 过滤：Chrome 对普通跳转也常给出 persisted=true（进 bfcache 备着），
+  // 而标签页被关掉时同样可能是 true，两者从事件上分不开。所以一律补报，
+  // 真的被 bfcache 恢复时靠 partialFlush 里的水位差避免重复计。
+  window.addEventListener("pagehide", function () {
     partialFlush();
   });
 
