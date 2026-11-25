@@ -305,7 +305,7 @@ echo "  配置    $DIR/.env"
 echo "  查看日志  journalctl --user -u $SERVICE -f"
 echo "  重启      systemctl --user restart $SERVICE"
 echo "  停止      systemctl --user stop $SERVICE"
-echo "  卸载      bash deploy/uninstall-local.sh --mode $MODE"
+echo "  卸载      curl -fsSL https://raw.githubusercontent.com/$REPO/main/deploy/uninstall-local.sh | bash -s -- --mode $MODE"
 if [ "$MODE" = "controller" ]; then
   echo "  后台账号  $ADMIN_USER / $ADMIN_PASS"
   echo "  访问      http://$( [ "${BIND:-127.0.0.1}" = "0.0.0.0" ] && echo "127.0.0.1" || echo "${BIND:-127.0.0.1}" ):$PORT/   （对外请在前面加 HTTPS 反代）"

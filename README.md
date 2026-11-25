@@ -110,8 +110,13 @@ curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/
 卸载：
 
 ```bash
-bash deploy/uninstall-local.sh --mode controller      # 保留数据
-bash deploy/uninstall-local.sh --mode node --purge    # 连数据与证书一起删
+# 主控
+curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/uninstall-local.sh \
+  | bash -s -- --mode controller
+
+# 节点（--purge 连数据与证书一起删）
+curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/uninstall-local.sh \
+  | bash -s -- --mode node --purge
 ```
 
 ## 反向代理
