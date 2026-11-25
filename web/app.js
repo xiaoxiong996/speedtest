@@ -1439,7 +1439,7 @@
     return workerUrl;
   }
 
-  function measureDownload(base, seconds, onSpeed) {
+  function measureDownload(base, seconds, onSpeed, onBytes) {
     var conns = connections();
     var counts = {};
     var workers = [];
@@ -1471,6 +1471,9 @@
         // 收尾按标称时长封顶：服务端断流后字节不再增长，这段停顿不该算进平均值
         samples.push({ t: done ? Math.min(dt, duration) : dt, bytes: total });
         lastTotal = total;
+        // 实时把「已下载字节」报给调用方：中途被停止或关页面时，
+        // 这部分流量已经从节点跑掉了，要补报给主控
+        if (onBytes) onBytes(total);
         if (!done) {
           var inst = dt > 1500 ? averageSpeed(samples, 10000, 900) : 0;
           if (inst > 0) onSpeed(inst);
@@ -1484,6 +1487,7 @@
           // 收尾时再数一遍已到账的字节，报告里要展示实际消耗的流量
           var got = 0;
           for (var j in counts) got += counts[j];
+          if (onBytes) onBytes(got);
           resolve({ samples: samples, bytes: Math.max(got, lastTotal) });
         }
       }, 250);
@@ -1500,7 +1504,7 @@
     return new Blob([buf], { type: "application/octet-stream" });
   }
 
-  function measureUpload(base, seconds, onSpeed, payloadBytes) {
+  function measureUpload(base, seconds, onSpeed, payloadBytes, onBytes) {
     var conns = Math.min(connections(), 8);
     // 单块太大时，一条连接的已发字节是一段一段跳的，聚合起来就是明显的锯齿。
     // 1MB 一块，慢速线路上一块一两秒，多连接错开后正好被滑动窗口抹平；
@@ -1554,6 +1558,13 @@
       // 同样按标称时长封顶，别把「请求已发完、等下一轮」的空档算成掉速
       samples.push({ t: done ? Math.min(dt, seconds * 1000) : dt, bytes: total });
       lastTotal = total;
+      // 已发出的字节（含还在 socket 缓冲里的那块）：中断时服务端可能还没收全，
+      // 但带宽确实已经占了，流量要按发出去的量算
+      if (onBytes) {
+        var sentNow = 0;
+        for (var m = 0; m < per.length; m++) sentNow += per[m] + (live[m] || 0);
+        onBytes(sentNow);
+      }
       if (!done) {
         // 上传按整块确认计数，头一两块会在第 1~2 秒集中到账，先让这段过去再显示
         var inst = dt > 2500 ? averageSpeed(samples, 10000, 1800) : 0;
@@ -1572,6 +1583,7 @@
           // 上传总量 = 各连接已发出的字节之和，报告里要展示实际消耗的流量
           var sent = 0;
           for (var i = 0; i < per.length; i++) sent += per[i] + (live[i] || 0);
+          if (onBytes) onBytes(sent);
           resolve({ samples: samples, bytes: Math.max(sent, lastTotal), fails: fails, status: lastStatus });
         }, 300);
       });
@@ -1744,6 +1756,8 @@
     toggleSettings(false);
     clearTimeout(state.jumpTimer);
     state.abort = new AbortController();
+    // 记下本轮节点与「已跑掉的流量」，中途中断时用它补报
+    partialStart(state.node && state.node.id);
     gaugeMax = 1000;
     setRunning(true);
     els.dial.classList.remove("gauge");
@@ -1769,12 +1783,14 @@
       });
       // 下载一开始就把进度条交给时间推进（12% → 55%），不再是等阶段结束才跳
       rampProgress(55, (s.downloadSeconds || 15) * 1000);
-      var dlRun = await measureDownload(state.base, s.downloadSeconds, dlMeter.tick);
+      var dlRun = await measureDownload(state.base, s.downloadSeconds, dlMeter.tick, partialSawDown);
       stopDlLat();
+      dlBytes = dlRun.bytes || 0;
+      // 被中断就别再白等 3 秒带载延迟，尽快走补报
+      if (state.abort.signal.aborted) throw new Error("aborted");
       // 下载占满连接时排队的小请求要等阶段结束才回来，这里再补测几次
       var dlLat = await measureLoadedLatency(state.base, 3);
       if (dlLat) els.pgDownLat.textContent = fmtPing(dlLat);
-      dlBytes = dlRun.bytes || 0;
       if (state.abort.signal.aborted) throw new Error("aborted");
       dl = finalSpeed(dlRun.samples) || dl;
       gaugeMax = 1000;
@@ -1798,7 +1814,7 @@
       });
       // 上传同样实时推进（55% → 92%）
       rampProgress(92, (s.uploadSeconds || 15) * 1000);
-      var ulRun = await measureUpload(state.base, s.uploadSeconds, ulMeter.tick, dl > 300 ? 4 << 20 : 1 << 20);
+      var ulRun = await measureUpload(state.base, s.uploadSeconds, ulMeter.tick, dl > 300 ? 4 << 20 : 1 << 20, partialSawUp);
       // 一个字节都没成功上传：把原因说出来，别让用户盯着 0.00 猜
       if (!(ulRun.bytes > 0) && ulRun.fails > 0) {
         toast(
@@ -1808,10 +1824,12 @@
         );
       }
       stopUlLat();
+      ulBytes = ulRun.bytes || 0;
+      // 上传阶段被中断：已发出去的字节照样要算流量，补报后直接收尾
+      if (state.abort.signal.aborted) throw new Error("aborted");
       var ulLat = await measureLoadedLatency(state.base, 3);
       if (ulLat) els.pgUpLat.textContent = fmtPing(ulLat);
       gaugeMax = 1000;
-      ulBytes = ulRun.bytes || 0;
       ul = finalSpeed(ulRun.samples) || ul;
       setDial(fmtSpeed(ul), speedUnit(), "", true);
       els.mtUp.textContent = fmtSpeed(ul);
@@ -1825,8 +1843,12 @@
       setDial(fmtSpeed(dl), speedUnit(), "", true);
       rampProgress(100, 500);   // 收尾也走一小段，避免最后一格"啪"地跳满
       showResult(ping, dl, ul);
+      // 流量已随报告一起报给主控，清掉中断补报的计数，避免重复计入
+      partialClear();
       reportResult(ping, dl, ul, dlBytes, ulBytes, buildTimeline(ping, dlRun.samples, ulRun.samples), dlLat, ulLat);
     } catch (e) {
+      // 中途停止 / 出错 / 节点断流：把已经跑掉的流量补报掉，别让节点白掉带宽
+      partialFlush();
       setRunning(false);
       spin(false);
       resetDial();
@@ -1984,6 +2006,72 @@
     }
     try { localStorage.setItem("st_rc", JSON.stringify(map)); } catch (e) {}
   }
+
+  /* ---------------- 中断测速的流量补报 ----------------
+     测速流量是实打实从节点跑掉的：下载流已经吐出来的字节、上传已经发出去的字节，
+     不管这轮测速有没有生成报告，都占着节点带宽。用户中途点停止、关页面、切网络时，
+     这里把「已经跑掉的那部分」单独补报给主控（只结流量、不出报告），
+     否则点一下停止就能白用节点流量，限额也就形同虚设。 */
+  var partial = { nodeId: "", down: 0, up: 0, active: false };
+
+  function partialStart(nodeId) {
+    partial.nodeId = nodeId || "";
+    partial.down = 0;
+    partial.up = 0;
+    partial.active = !!partial.nodeId;
+  }
+
+  function partialSawDown(bytes) {
+    if (partial.active && bytes > partial.down) partial.down = bytes;
+  }
+
+  function partialSawUp(bytes) {
+    if (partial.active && bytes > partial.up) partial.up = bytes;
+  }
+
+  // 正常出报告时清空：这一轮的流量已经随报告报过了，再补报会重复计
+  function partialClear() {
+    partial.active = false;
+    partial.down = 0;
+    partial.up = 0;
+  }
+
+  // 把已跑掉的流量补报出去，返回是否真的发了请求
+  function partialFlush() {
+    var nodeId = partial.nodeId;
+    var down = Math.round(partial.down || 0);
+    var up = Math.round(partial.up || 0);
+    partialClear();
+    if (!nodeId || (down <= 0 && up <= 0)) return false;
+    var body = JSON.stringify({
+      nodeId: nodeId,
+      partial: true,
+      downloadBytes: down,
+      uploadBytes: up
+    });
+    // 页面正在卸载时 fetch 会被浏览器掐掉，sendBeacon 才是卸载期唯一可靠的通道
+    try {
+      if (navigator.sendBeacon) {
+        if (navigator.sendBeacon("/api/report", new Blob([body], { type: "application/json" }))) return true;
+      }
+    } catch (e) {}
+    try {
+      fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body,
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+    return true;
+  }
+
+  // 关页面 / 跳走时补报。注意 bfcache 恢复（persisted）的页面还会继续跑，不能报，
+  // 不然同一段流量会被补报一次、又随报告报一次。
+  window.addEventListener("pagehide", function (e) {
+    if (e && e.persisted) return;
+    partialFlush();
+  });
 
   function reportResult(ping, down, up, downBytes, upBytes, timeline, downLat, upLat) {
     // 页面可能是用另一种协议打开的（例如走 IPv6 访问却选了 IPv4 节点），

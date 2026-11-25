@@ -17,7 +17,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.5.1 --url https://speed.example.com
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest:1.5.2 --url https://speed.example.com
 ```
 
 不加任何参数则进入交互式安装（依次询问域名、端口、后台路径、密码）：
@@ -48,13 +48,16 @@ sudo bash install.sh
 
 节点列表里随时可以手动「清零」当月流量并重新启用。流量完全由主控统计，节点侧不需要任何配置；即使关闭「收集测速结果」，限额计数照常工作。
 
+测速中途点「停止」、直接关页面或断网时，已经跑掉的上下行字节会单独补报给主控（只结流量、不生成报告），
+不会出现「测一半就退出」白用节点带宽的情况。正常跑完的测速仍然只报一次，不会重复计入。
+
 首页会在连接信息与 IPv4/IPv6 切换之间显示「N 人正在测速 · 使用 XX 节点」。人数由测速期间的匿名心跳统计（每 5 秒一次，20 秒无心跳即视为结束），主控不记录访客 IP。
 
 ## 节点安装
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/install-node.sh \
-  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.5.1 --port 8443 \
+  | sudo bash -s -- --image ghcr.io/xiaoxiong996/speedtest-node:1.5.2 --port 8443 \
       --domain node.example.com --host node.example.com --origin https://speed.example.com
 ```
 
@@ -73,11 +76,11 @@ curl -fsSL https://raw.githubusercontent.com/xiaoxiong996/speedtest/main/deploy/
 
 ```bash
 # 主控
-cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.5.1|' .env
+cd /opt/speedtest && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest:1.5.2|' .env
 docker compose pull && docker compose up -d
 
 # 节点（certs/ 不动，证书继续用）
-cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.5.1|' .env
+cd /opt/speedtest-node && sed -i 's|^IMAGE=.*|IMAGE=ghcr.io/xiaoxiong996/speedtest-node:1.5.2|' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 

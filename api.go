@@ -311,6 +311,9 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		// 前端统计的本次测速流量（字节）
 		DownloadBytes int64 `json:"downloadBytes"`
 		UploadBytes   int64 `json:"uploadBytes"`
+		// 中断补报：测速没跑完（用户点停止、关页面、切网断流）时前端只上报已跑掉的流量，
+		// 不生成测速报告。流量该算还是要算，否则点一下停止就能免费用掉节点带宽。
+		Partial bool `json:"partial"`
 		// 前端按秒聚合的测速曲线（延迟 → 下行 → 上行）
 		Timeline []TimelinePoint `json:"timeline"`
 	}
@@ -341,6 +344,11 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	// 节点流量统计放在「是否收集报告」之前：关闭报告收集只是不留历史记录，
 	// 流量限额仍然要算，否则一关收集限额就形同虚设。
 	s.traffic.add(strings.TrimSpace(payload.NodeID), payload.DownloadBytes, payload.UploadBytes)
+	// 中断补报只结流量，不出报告：不算测速记录、不进历史、也不占用报告采集。
+	if payload.Partial {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "partial": true})
+		return
+	}
 	if !cfg.Settings.CollectResults {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "skipped": true})
 		return
